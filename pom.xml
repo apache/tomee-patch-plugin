@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+
+<!-- $Rev$ $Date$ -->
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.apache</groupId>
+    <artifactId>apache</artifactId>
+    <version>21</version>
+    <relativePath><!--Resolve on repository--></relativePath>
+  </parent>
+
+
+  <groupId>org.apache.tomee.patch</groupId>
+  <artifactId>tomee-patch-parent</artifactId>
+  <packaging>pom</packaging>
+  <version>0.1-SNAPSHOT</version>
+
+  <name>Apache TomEE Patch Plugin</name>
+  <description>Tools and Maven Plugin to help complete the javax-to-jakarta bytecode transformation</description>
+  <url>http://tomee.apache.org</url>
+  <inceptionYear>1999</inceptionYear>
+
+  <prerequisites>
+    <maven>3.2.5</maven>
+  </prerequisites>
+
+  <scm>
+    <connection>scm:git:git@github.com:apache/tomee-patch-plugin.git</connection>
+    <url>scm:git:git@github.com:apache/tomee-patch-plugin.git</url>
+    <developerConnection>scm:git:git@github.com:apache/tomee-patch-plugin.git</developerConnection>
+    <tag>HEAD</tag>
+  </scm>
+
+  <issueManagement>
+    <system>jira</system>
+    <url>http://issues.apache.org/jira/browse/TOMEE</url>
+  </issueManagement>
+
+  <mailingLists>
+    <mailingList>
+      <name>TomEE Commits List</name>
+      <subscribe>commits-subscribe@tomee.apache.org</subscribe>
+      <unsubscribe>commits-unsubscribe@tomee.apache.org</unsubscribe>
+      <post>commits@tomee.apache.org</post>
+      <archive>http://mail-archives.apache.org/mod_mbox/tomee-commits/</archive>
+    </mailingList>
+    <mailingList>
+      <name>TomEE Developer List</name>
+      <subscribe>dev-subscribe@tomee.apache.org</subscribe>
+      <unsubscribe>dev-unsubscribe@tomee.apache.org</unsubscribe>
+      <post>dev@tomee.apache.org</post>
+      <archive>http://mail-archives.apache.org/mod_mbox/tomee-dev/</archive>
+    </mailingList>
+    <mailingList>
+      <name>TomEE Users List</name>
+      <subscribe>users-subscribe@tomee.apache.org</subscribe>
+      <unsubscribe>users-unsubscribe@tomee.apache.org</unsubscribe>
+      <post>users@tomee.apache.org</post>
+      <archive>http://mail-archives.apache.org/mod_mbox/tomee-users/</archive>
+    </mailingList>
+  </mailingLists>
+
+  <modules>
+    <module>tomee-patch-core</module>
+    <module>tomee-patch-plugin</module>
+  </modules>
+</project>
+
