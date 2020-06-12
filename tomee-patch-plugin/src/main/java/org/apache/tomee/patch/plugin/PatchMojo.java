@@ -17,8 +17,6 @@
 package org.apache.tomee.patch.plugin;
 
 import org.apache.maven.artifact.Artifact;
-import org.apache.maven.artifact.factory.ArtifactFactory;
-import org.apache.maven.artifact.resolver.ArtifactResolver;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -28,10 +26,11 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
-import org.apache.maven.project.MavenProjectHelper;
 import org.apache.maven.toolchain.Toolchain;
 import org.apache.maven.toolchain.ToolchainManager;
+import org.apache.tomee.patch.core.Clazz;
 import org.apache.tomee.patch.core.Is;
+import org.apache.tomee.patch.core.Transformation;
 import org.codehaus.plexus.compiler.Compiler;
 import org.codehaus.plexus.compiler.CompilerConfiguration;
 import org.codehaus.plexus.compiler.CompilerMessage;
@@ -39,7 +38,9 @@ import org.codehaus.plexus.compiler.CompilerResult;
 import org.codehaus.plexus.compiler.manager.CompilerManager;
 import org.codehaus.plexus.compiler.manager.NoSuchCompilerException;
 import org.tomitribe.jkta.usage.Dir;
+import org.tomitribe.jkta.util.Paths;
 import org.tomitribe.util.Files;
+import org.tomitribe.util.IO;
 import org.tomitribe.util.Zips;
 
 import java.io.File;
@@ -159,7 +160,7 @@ public class PatchMojo extends AbstractMojo {
     public void execute() throws MojoExecutionException, CompilationFailureException {
         try {
             Files.mkdir(patchClasspathDirectory);
-            
+
             // Select the zip files and jars we'll be potentially patching
             final List<Artifact> artifacts = getPatchArtifacts();
 
@@ -168,9 +169,26 @@ public class PatchMojo extends AbstractMojo {
 
             compile(patchSourceDirectory, jars);
 
+            final List<Clazz> clazzes = classes();
+
+            final Transformation transformation = new Transformation(clazzes, new MavenLog(getLog()));
+            for (final Artifact artifact : artifacts) {
+                final File file = artifact.getFile();
+                getLog().debug("Patching " + file.getAbsolutePath());
+                final File patched = transformation.transformArchive(file);
+                IO.copy(patched, file);
+            }
+
         } catch (IOException e) {
             throw new MojoExecutionException("Error occurred during execution", e);
         }
+    }
+
+    private List<Clazz> classes() {
+        return Dir.from(buildDirectory).files()
+                .filter(file -> file.getName().endsWith(".class"))
+                .map(file -> new Clazz(Paths.childPath(buildDirectory, file), file))
+                .collect(Collectors.toList());
     }
 
     /**
