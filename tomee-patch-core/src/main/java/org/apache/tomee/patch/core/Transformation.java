@@ -30,10 +30,12 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
+
+import static org.tomitribe.jkta.util.Predicates.not;
 
 public class Transformation {
 
@@ -59,77 +61,76 @@ public class Transformation {
 
         try (final InputStream inputStream = IO.read(jar)) {
             try (final OutputStream outputStream = IO.write(tempFile)) {
-                final Jar old = Jar.enter(jar.getName());
-                try {
-                    scanJar(inputStream, outputStream);
-                } finally {
-                    Jar.exit(old);
-                }
-                return tempFile;
+                scanJar(jar.getName(), inputStream, outputStream);
             }
         }
+
+        return tempFile;
     }
 
-    private void scanJar(final InputStream inputStream, final OutputStream outputStream) throws IOException {
-        final ZipInputStream zipInputStream = new ZipInputStream(inputStream);
-        final ZipOutputStream zipOutputStream = new ZipOutputStream(outputStream);
+    private void scanJar(final String name, final InputStream inputStream, final OutputStream outputStream) throws IOException {
+        final Jar oldJar = Jar.enter(name);
+        final Jar jar = Jar.current();
+        try {
+            final ZipInputStream zipInputStream = new ZipInputStream(inputStream);
+            final ZipOutputStream zipOutputStream = new ZipOutputStream(outputStream);
 
-        ZipEntry oldEntry;
-        while ((oldEntry = zipInputStream.getNextEntry()) != null) {
-            // TODO: the name may be changed in transformation
-            final String path = oldEntry.getName();
+            ZipEntry oldEntry;
+            while ((oldEntry = zipInputStream.getNextEntry()) != null) {
+                // TODO: the name may be changed in transformation
+                final String path = oldEntry.getName();
 
-            /*
-             * If this entry has been patched, skip it
-             * We will add the patched version at the end
-             */
-            if (isPatched(path)) {
-                log.debug("Skipping class " + path);
-                IO.copy(zipInputStream, skipped);
-                continue;
-            }
-
-            final ZipEntry newEntry = new ZipEntry(path);
-
-//            copyAttributes(oldEntry, newEntry);
-
-            zipOutputStream.putNextEntry(newEntry);
-
-            try {
-                if (path.endsWith(".class")) {
-                    scanClass(zipInputStream, zipOutputStream);
-                } else if (isZip(path)) {
-                    final Jar old = Jar.enter(path);
-                    try {
-                        scanJar(zipInputStream, zipOutputStream);
-                    } finally {
-                        Jar.exit(old); // restore the old state
-                    }
-                } else {
-                    IO.copy(zipInputStream, zipOutputStream);
+                /*
+                 * If this entry has been patched, skip it
+                 * We will add the patched version at the end
+                 */
+                if (isPatched(path, jar)) {
+                    log.debug("Skipping class " + path);
+                    IO.copy(zipInputStream, skipped);
+                    continue;
                 }
-            } finally {
-                zipOutputStream.closeEntry();
-            }
-        }
 
-        // If we skipped any classes, add them now
-        if (Jar.current().hasPatches()) {
-            log.info("Patching " + Jar.current().getName());
-            for (final Clazz clazz : Jar.current().getSkipped()) {
-                log.info("Applying patch " + clazz.getName());
+                final ZipEntry newEntry = new ZipEntry(path);
 
-                final ZipEntry newEntry = new ZipEntry(clazz.getName());
+                //            copyAttributes(oldEntry, newEntry);
+
                 zipOutputStream.putNextEntry(newEntry);
 
-                // Run any transformations on these classes as well
-                scanClass(IO.read(clazz.getFile()), zipOutputStream);
-
-                zipOutputStream.closeEntry();
+                try {
+                    if (path.endsWith(".class")) {
+                        scanClass(zipInputStream, zipOutputStream);
+                    } else if (isZip(path)) {
+                        scanJar(path, zipInputStream, zipOutputStream);
+                    } else {
+                        IO.copy(zipInputStream, zipOutputStream);
+                    }
+                } finally {
+                    zipOutputStream.closeEntry();
+                }
             }
-        }
 
-        zipOutputStream.close();
+            // If we skipped any classes, add them now
+            if (jar.hasPatches()) {
+                log.info("Patching " + jar.getName());
+                for (final Clazz clazz : jar.getSkipped()) {
+                    log.debug("Applying patch " + clazz.getName());
+
+                    final ZipEntry newEntry = new ZipEntry(clazz.getName());
+                    zipOutputStream.putNextEntry(newEntry);
+
+                    // Run any transformations on these classes as well
+                    scanClass(IO.read(clazz.getFile()), zipOutputStream);
+
+                    zipOutputStream.closeEntry();
+                    clazz.applied();
+                }
+            }
+            zipOutputStream.finish();
+        } catch (IOException e) {
+            throw new IOException(jar.getPath() + e.getMessage(), e);
+        } finally {
+            Jar.exit(oldJar);
+        }
     }
 
     private static void copyAttributes(final ZipEntry oldEntry, final ZipEntry newEntry) {
@@ -156,18 +157,61 @@ public class Transformation {
         outputStream.write(bytes);
     }
 
+    public void complete() {
+        final List<Clazz> appliedPatches = classes.stream()
+                .filter(Clazz::isApplied)
+                .collect(Collectors.toList());
+
+        final List<Clazz> unappliedPatches = classes.stream()
+                .filter(not(Clazz::isApplied))
+                .collect(Collectors.toList());
+
+        final int applied = appliedPatches.stream()
+                .map(Clazz::getApplied)
+                .reduce(Integer::sum)
+                .orElse(0);
+
+        log.info(String.format("Applied %s patches to %s locations", appliedPatches.size(), applied));
+        appliedPatches.stream()
+                .map(Clazz::getName)
+                .map(s -> "  " + s)
+                .forEach(log::debug);
+
+        if (unappliedPatches.size() > 0) {
+            final String message = String.format("Failed to apply %s patches", unappliedPatches.size());
+            log.error(message);
+            unappliedPatches.stream()
+                    .map(Clazz::getName)
+                    .map(s -> "  " + s)
+                    .forEach(log::error);
+            throw new UnappliedPatchesException(unappliedPatches);
+        }
+    }
+
     public static class Jar {
-        private static final AtomicReference<Jar> current = new AtomicReference<>(new Jar("<none>"));
+        private static final ThreadLocal<Jar> current = ThreadLocal.withInitial(Jar::new);
 
         private final Set<Clazz> patches = new HashSet<>();
         private final String name;
+        private final Jar parent;
 
-        public Jar(final String name) {
+        private Jar() {
+            this.name = "";
+            this.parent = null;
+        }
+
+        private Jar(final String name, Jar parent) {
             this.name = name;
+            this.parent = parent;
         }
 
         public String getName() {
             return name;
+        }
+
+        public String getPath() {
+            if (parent == null) return name;
+            return parent.getPath() + "/" + name;
         }
 
         public boolean hasPatches() {
@@ -179,11 +223,13 @@ public class Transformation {
         }
 
         public static Jar enter(final String name) {
-            return current.getAndSet(new Jar(name));
+            final Jar old = current.get();
+            current.set(new Jar(name, old));
+            return old;
         }
 
         public static void exit(final Jar oldJar) {
-            current.getAndSet(oldJar);
+            current.set(oldJar);
         }
 
         public Collection<Clazz> getSkipped() {
@@ -201,10 +247,10 @@ public class Transformation {
         }
     }
 
-    private boolean isPatched(final String path) {
+    private boolean isPatched(final String path, final Jar jar) {
         for (final Clazz clazz : classes) {
             if (path.startsWith(clazz.getPrefix())) {
-                Jar.current().patch(clazz, classes);
+                jar.patch(clazz, classes);
                 return true;
             }
         }

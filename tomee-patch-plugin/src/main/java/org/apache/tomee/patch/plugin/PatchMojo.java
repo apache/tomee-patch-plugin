@@ -179,6 +179,7 @@ public class PatchMojo extends AbstractMojo {
                 IO.copy(patched, file);
             }
 
+            transformation.complete();
         } catch (IOException e) {
             throw new MojoExecutionException("Error occurred during execution", e);
         }

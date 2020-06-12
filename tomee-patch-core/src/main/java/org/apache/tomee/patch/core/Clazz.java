@@ -23,11 +23,24 @@ public class Clazz {
     private final String name;
     private final String prefix;
     private final File file;
+    private int applied;
 
     public Clazz(final String name, final File file) {
         this.name = name;
         this.prefix = name.replaceAll("\\.class$", "");
         this.file = file;
+    }
+
+    public void applied() {
+        this.applied++;
+    }
+
+    public boolean isApplied() {
+        return applied > 0;
+    }
+
+    public int getApplied() {
+        return applied;
     }
 
     public String getPrefix() {
