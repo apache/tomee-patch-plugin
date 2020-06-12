@@ -64,9 +64,6 @@ public class PatchMojo extends AbstractMojo {
     @Parameter(defaultValue = "${session}", readonly = true, required = true)
     private MavenSession session;
 
-    @Parameter(defaultValue = "${project.build.directory}", required = true)
-    private File outputDirectory;
-
     @Parameter(defaultValue = "${project.basedir}/src/patch/java", required = true)
     private File patchSourceDirectory;
 
@@ -89,13 +86,13 @@ public class PatchMojo extends AbstractMojo {
     private Map<String, String> jdkToolchain;
 
     /**
-     * Sets the executable of the compiler to use when {@link #fork} is <code>true</code>.
+     * Sets the executable of the compiler to use when fork is <code>true</code>.
      */
     @Parameter(property = "maven.compiler.executable")
     private String executable;
 
     /**
-     * Version of the compiler to use, ex. "1.3", "1.5", if {@link #fork} is set to <code>true</code>.
+     * Version of the compiler to use, ex. "1.3", "1.5", if fork is set to <code>true</code>.
      */
     @Parameter(property = "maven.compiler.compilerVersion")
     private String compilerVersion;
@@ -126,15 +123,6 @@ public class PatchMojo extends AbstractMojo {
      */
     @Parameter(property = "encoding", defaultValue = "${project.build.sourceEncoding}")
     private String encoding;
-
-    @Component
-    private MavenProjectHelper projectHelper;
-
-    @Component
-    protected ArtifactFactory factory;
-
-    @Component
-    protected ArtifactResolver resolver;
 
     /**
      * Plexus compiler manager.
