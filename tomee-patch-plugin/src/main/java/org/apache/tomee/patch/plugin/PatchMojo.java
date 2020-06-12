@@ -31,12 +31,14 @@ import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.MavenProjectHelper;
 import org.apache.maven.toolchain.Toolchain;
 import org.apache.maven.toolchain.ToolchainManager;
+import org.apache.tomee.patch.core.Is;
 import org.codehaus.plexus.compiler.Compiler;
 import org.codehaus.plexus.compiler.CompilerConfiguration;
 import org.codehaus.plexus.compiler.CompilerMessage;
 import org.codehaus.plexus.compiler.CompilerResult;
 import org.codehaus.plexus.compiler.manager.CompilerManager;
 import org.codehaus.plexus.compiler.manager.NoSuchCompilerException;
+import org.tomitribe.jkta.usage.Dir;
 import org.tomitribe.util.Files;
 import org.tomitribe.util.Zips;
 
@@ -48,6 +50,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -63,8 +67,14 @@ public class PatchMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.build.directory}", required = true)
     private File outputDirectory;
 
-    @Parameter(defaultValue = "${project.basedir}/src/main/patch", required = true)
+    @Parameter(defaultValue = "${project.basedir}/src/patch/java", required = true)
     private File patchSourceDirectory;
+
+    /**
+     * Regex to identify which archives should be matched
+     */
+    @Parameter(defaultValue = "jakartaee9.*\\.zip", required = true)
+    private String select;
 
     /**
      * <p>
@@ -99,8 +109,15 @@ public class PatchMojo extends AbstractMojo {
     /**
      * The target directory of the compiler if fork is true.
      */
-    @Parameter(defaultValue = "${project.build.directory}", required = true, readonly = true)
+    @Parameter(defaultValue = "${project.build.directory}/patch-classes", required = true, readonly = true)
     private File buildDirectory;
+
+    /**
+     * The directory where we will extract the zips being patched so we can compile the
+     * patch source against the jars contained within.
+     */
+    @Parameter(defaultValue = "${project.build.directory}/patch-classpath", required = true)
+    private File patchClasspathDirectory;
 
     /**
      * The -encoding argument for the Java compiler.
@@ -153,134 +170,192 @@ public class PatchMojo extends AbstractMojo {
      */
     public void execute() throws MojoExecutionException, CompilationFailureException {
         try {
-            final List<Artifact> artifacts = Stream.of(getSourceArtifacts())
-                    .filter(artifact -> artifact.getFile().getName().contains("jakartaee9"))
-                    .collect(Collectors.toList());
+            Files.mkdir(patchClasspathDirectory);
+            
+            // Select the zip files and jars we'll be potentially patching
+            final List<Artifact> artifacts = getPatchArtifacts();
 
-            final File archives = new File(outputDirectory, "patch");
-            Files.mkdir(archives);
+            // Extract any zips and return a list of jars
+            final List<File> jars = prepareJars(artifacts);
 
-            Compiler compiler;
+            compile(patchSourceDirectory, jars);
 
-            getLog().debug("Using compiler '" + compilerId + "'.");
-
-            try {
-                compiler = compilerManager.getCompiler(compilerId);
-            } catch (NoSuchCompilerException e) {
-                throw new MojoExecutionException("No such compiler '" + e.getCompilerId() + "'.");
-            }
-
-            Toolchain tc = getToolchain();
-            if (tc != null) {
-                getLog().info("Toolchain in maven-compiler-plugin: " + tc);
-                //TODO somehow shaky dependency between compilerId and tool executable.
-                executable = tc.findTool(compilerId);
-            }
-
-            final CompilerConfiguration compilerConfiguration = new CompilerConfiguration();
-            compilerConfiguration.setOutputLocation(outputDirectory.getAbsolutePath());
-            compilerConfiguration.setOptimize(false);
-            compilerConfiguration.setDebug(true);
-            compilerConfiguration.setParameters(false);
-            compilerConfiguration.setVerbose(false);
-            compilerConfiguration.setShowWarnings(false);
-            compilerConfiguration.setFailOnWarning(false);
-            compilerConfiguration.setShowDeprecation(false);
-            compilerConfiguration.setSourceVersion(source);
-            compilerConfiguration.setTargetVersion(target);
-            compilerConfiguration.setReleaseVersion(null);
-            compilerConfiguration.setProc(null);
-            compilerConfiguration.setSourceLocations(getPatchSourceLocations());
-            compilerConfiguration.setAnnotationProcessors(null);
-            compilerConfiguration.setSourceEncoding(encoding);
-            compilerConfiguration.setFork(true);
-            compilerConfiguration.setExecutable(executable);
-            compilerConfiguration.setWorkingDirectory(basedir);
-            compilerConfiguration.setCompilerVersion(compilerVersion);
-            compilerConfiguration.setBuildDirectory(buildDirectory);
-            compilerConfiguration.setOutputFileName(null);
-
-            final CompilerResult compilerResult;
-            try {
-                compilerResult = compiler.performCompile(compilerConfiguration);
-            } catch (Exception e) {
-                throw new MojoExecutionException("Fatal error compiling", e);
-            }
-
-            List<CompilerMessage> warnings = new ArrayList<>();
-            List<CompilerMessage> errors = new ArrayList<>();
-            List<CompilerMessage> others = new ArrayList<>();
-            for (CompilerMessage message : compilerResult.getCompilerMessages()) {
-                if (message.getKind() == CompilerMessage.Kind.ERROR) {
-                    errors.add(message);
-                } else if (message.getKind() == CompilerMessage.Kind.WARNING
-                        || message.getKind() == CompilerMessage.Kind.MANDATORY_WARNING) {
-                    warnings.add(message);
-                } else {
-                    others.add(message);
-                }
-            }
-
-            if (true && !compilerResult.isSuccess()) {
-                for (CompilerMessage message : others) {
-                    assert message.getKind() != CompilerMessage.Kind.ERROR
-                            && message.getKind() != CompilerMessage.Kind.WARNING
-                            && message.getKind() != CompilerMessage.Kind.MANDATORY_WARNING;
-                    getLog().info(message.toString());
-                }
-                if (!warnings.isEmpty()) {
-                    getLog().info("-------------------------------------------------------------");
-                    getLog().warn("COMPILATION WARNING : ");
-                    getLog().info("-------------------------------------------------------------");
-                    for (CompilerMessage warning : warnings) {
-                        getLog().warn(warning.toString());
-                    }
-                    getLog().info(warnings.size() + ((warnings.size() > 1) ? " warnings " : " warning"));
-                    getLog().info("-------------------------------------------------------------");
-                }
-
-                if (!errors.isEmpty()) {
-                    getLog().info("-------------------------------------------------------------");
-                    getLog().error("COMPILATION ERROR : ");
-                    getLog().info("-------------------------------------------------------------");
-                    for (CompilerMessage error : errors) {
-                        getLog().error(error.toString());
-                    }
-                    getLog().info(errors.size() + ((errors.size() > 1) ? " errors " : " error"));
-                    getLog().info("-------------------------------------------------------------");
-                }
-
-                if (!errors.isEmpty()) {
-                    throw new CompilationFailureException(errors);
-                } else {
-                    throw new CompilationFailureException(warnings);
-                }
-            } else {
-                for (CompilerMessage message : compilerResult.getCompilerMessages()) {
-                    switch (message.getKind()) {
-                        case NOTE:
-                        case OTHER:
-                            getLog().info(message.toString());
-                            break;
-
-                        case ERROR:
-                            getLog().error(message.toString());
-                            break;
-
-                        case MANDATORY_WARNING:
-                        case WARNING:
-                        default:
-                            getLog().warn(message.toString());
-                            break;
-                    }
-                }
-            }
-
-            for (final Artifact artifact : artifacts) {
-                Zips.unzip(artifact.getFile(), archives);
-            }
         } catch (IOException e) {
             throw new MojoExecutionException("Error occurred during execution", e);
+        }
+    }
+
+    /**
+     * Any zip files contained in the Artifact set should be extracted
+     * Any jar files contained in the Artifact set will be returned as-is
+     */
+    private List<File> prepareJars(final List<Artifact> artifacts) throws IOException {
+
+        // Extract all zip, war, ear, rar files.  Do not extract jar files.
+        for (final Artifact artifact : artifacts) {
+            if (isZip(artifact.getFile()) && !isJar(artifact.getFile())) {
+                Zips.unzip(artifact.getFile(), patchClasspathDirectory);
+            }
+        }
+
+        // Collect a list of jars
+        final List<File> jars = new ArrayList<>();
+
+        // Add any artifacts that are already jars
+        artifacts.stream()
+                .map(Artifact::getFile)
+                .filter(File::isFile)
+                .filter(this::isJar)
+                .forEach(jars::add);
+
+        // Add any extracted files that are jars
+        Dir.from(patchClasspathDirectory)
+                .files()
+                .filter(File::isFile)
+                .filter(this::isJar)
+                .forEach(jars::add);
+
+        return jars;
+    }
+
+    private boolean isJar(final File file) {
+        return file.getName().endsWith(".jar");
+    }
+
+    private static boolean isZip(final File file) {
+        return new Is.Zip().accept(file);
+    }
+
+    private List<Artifact> getPatchArtifacts() {
+        final Predicate<String> match = Pattern.compile(select).asPredicate();
+        return Stream.of(getSourceArtifacts())
+                .filter(artifact -> match.test(artifact.getFile().getName()))
+                .collect(Collectors.toList());
+    }
+
+    private void compile(final File patchSourceDirectory, final List<File> jars) throws MojoExecutionException, CompilationFailureException {
+
+        getLog().debug("Using compiler '" + compilerId + "'.");
+
+        final Compiler compiler;
+
+        try {
+            compiler = compilerManager.getCompiler(compilerId);
+        } catch (NoSuchCompilerException e) {
+            throw new MojoExecutionException("No such compiler '" + e.getCompilerId() + "'.");
+        }
+
+        final Toolchain tc = getToolchain();
+        if (tc != null) {
+            getLog().info("Toolchain in maven-compiler-plugin: " + tc);
+            //TODO somehow shaky dependency between compilerId and tool executable.
+            executable = tc.findTool(compilerId);
+        }
+
+
+        final CompilerConfiguration compilerConfiguration = new CompilerConfiguration();
+        compilerConfiguration.setOutputLocation(buildDirectory.getAbsolutePath());
+        compilerConfiguration.setOptimize(false);
+        compilerConfiguration.setDebug(true);
+        compilerConfiguration.setParameters(false);
+        compilerConfiguration.setVerbose(false);
+        compilerConfiguration.setShowWarnings(false);
+        compilerConfiguration.setFailOnWarning(false);
+        compilerConfiguration.setShowDeprecation(false);
+        compilerConfiguration.setSourceVersion(source);
+        compilerConfiguration.setTargetVersion(target);
+        compilerConfiguration.setReleaseVersion(null);
+        compilerConfiguration.setProc(null);
+        compilerConfiguration.setSourceLocations(getPatchSourceLocations());
+        compilerConfiguration.setAnnotationProcessors(null);
+        compilerConfiguration.setSourceEncoding(encoding);
+        compilerConfiguration.setFork(true);
+        compilerConfiguration.setExecutable(executable);
+        compilerConfiguration.setWorkingDirectory(basedir);
+        compilerConfiguration.setCompilerVersion(compilerVersion);
+        compilerConfiguration.setBuildDirectory(buildDirectory);
+        compilerConfiguration.setOutputFileName(null);
+
+        // Add each jar as a classpath entry
+        jars.stream()
+                .map(File::getAbsolutePath)
+                .forEach(compilerConfiguration::addClasspathEntry);
+
+        // Now we can compile!
+        final CompilerResult compilerResult;
+        try {
+            compilerResult = compiler.performCompile(compilerConfiguration);
+        } catch (Exception e) {
+            throw new MojoExecutionException("Fatal error compiling", e);
+        }
+
+        List<CompilerMessage> warnings = new ArrayList<>();
+        List<CompilerMessage> errors = new ArrayList<>();
+        List<CompilerMessage> others = new ArrayList<>();
+        for (CompilerMessage message : compilerResult.getCompilerMessages()) {
+            if (message.getKind() == CompilerMessage.Kind.ERROR) {
+                errors.add(message);
+            } else if (message.getKind() == CompilerMessage.Kind.WARNING
+                    || message.getKind() == CompilerMessage.Kind.MANDATORY_WARNING) {
+                warnings.add(message);
+            } else {
+                others.add(message);
+            }
+        }
+
+        if (!compilerResult.isSuccess()) {
+            for (CompilerMessage message : others) {
+                assert message.getKind() != CompilerMessage.Kind.ERROR
+                        && message.getKind() != CompilerMessage.Kind.WARNING
+                        && message.getKind() != CompilerMessage.Kind.MANDATORY_WARNING;
+                getLog().info(message.toString());
+            }
+            if (!warnings.isEmpty()) {
+                getLog().info("-------------------------------------------------------------");
+                getLog().warn("COMPILATION WARNING : ");
+                getLog().info("-------------------------------------------------------------");
+                for (CompilerMessage warning : warnings) {
+                    getLog().warn(warning.toString());
+                }
+                getLog().info(warnings.size() + ((warnings.size() > 1) ? " warnings " : " warning"));
+                getLog().info("-------------------------------------------------------------");
+            }
+
+            if (!errors.isEmpty()) {
+                getLog().info("-------------------------------------------------------------");
+                getLog().error("COMPILATION ERROR : ");
+                getLog().info("-------------------------------------------------------------");
+                for (CompilerMessage error : errors) {
+                    getLog().error(error.toString());
+                }
+                getLog().info(errors.size() + ((errors.size() > 1) ? " errors " : " error"));
+                getLog().info("-------------------------------------------------------------");
+            }
+
+            if (!errors.isEmpty()) {
+                throw new CompilationFailureException(errors);
+            } else {
+                throw new CompilationFailureException(warnings);
+            }
+        } else {
+            for (CompilerMessage message : compilerResult.getCompilerMessages()) {
+                switch (message.getKind()) {
+                    case NOTE:
+                    case OTHER:
+                        getLog().info(message.toString());
+                        break;
+
+                    case ERROR:
+                        getLog().error(message.toString());
+                        break;
+
+                    case MANDATORY_WARNING:
+                    case WARNING:
+                    default:
+                        getLog().warn(message.toString());
+                        break;
+                }
+            }
         }
     }
 
