@@ -102,6 +102,8 @@ public class Transformation {
                         scanClass(zipInputStream, zipOutputStream);
                     } else if (isZip(path)) {
                         scanJar(path, zipInputStream, zipOutputStream);
+                    } else if (copyUnmodified(path)){
+                        IO.copy(zipInputStream, zipOutputStream);
                     } else {
                         scanResource(zipInputStream, zipOutputStream);
                     }
@@ -132,6 +134,13 @@ public class Transformation {
         } finally {
             Jar.exit(oldJar);
         }
+    }
+
+    private boolean copyUnmodified(final String path) {
+        if (path.endsWith("META-INF/DEPENDENCIES")) return true;
+        if (path.endsWith("META-INF/dependencies.xml")) return true;
+        if (path.endsWith("pom.xml")) return true;
+        return false;
     }
 
     private void scanResource(InputStream inputStream, final OutputStream outputStream) throws IOException {
