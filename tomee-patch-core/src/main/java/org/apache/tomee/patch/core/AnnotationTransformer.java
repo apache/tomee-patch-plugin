@@ -34,4 +34,20 @@ public class AnnotationTransformer extends AnnotationVisitor {
         return new AnnotationTransformer(this.api, super.visitArray(name));
     }
 
+    @Override
+    public void visit(final String name, final Object value) {
+        if (!(value instanceof String)) {
+            super.visit(name, value);
+            return;
+        }
+
+        final String updated = new Replace((String) value)
+                .prefix("{javax.validation.", "{jakarta.validation.")
+                .prefix("javax.persistence.", "jakarta.persistence.")
+                .prefix("javax.xml.ws.", "jakarta.xml.ws.")
+                .get();
+
+        super.visit(name, updated);
+    }
+
 }
