@@ -102,10 +102,10 @@ public class Transformation {
                         scanClass(zipInputStream, zipOutputStream);
                     } else if (isZip(path)) {
                         scanJar(path, zipInputStream, zipOutputStream);
-                    } else if (copyUnmodified(path)){
+                    } else if (copyUnmodified(path)) {
                         IO.copy(zipInputStream, zipOutputStream);
                     } else {
-                        scanResource(zipInputStream, zipOutputStream);
+                        scanResource(path, zipInputStream, zipOutputStream);
                     }
                 } finally {
                     zipOutputStream.closeEntry();
@@ -139,11 +139,20 @@ public class Transformation {
     private boolean copyUnmodified(final String path) {
         if (path.endsWith("META-INF/DEPENDENCIES")) return true;
         if (path.endsWith("META-INF/dependencies.xml")) return true;
+        if (path.endsWith("changelog.html")) return true;
         if (path.endsWith("pom.xml")) return true;
         return false;
     }
 
-    private void scanResource(InputStream inputStream, final OutputStream outputStream) throws IOException {
+    private void scanResource(final String path, InputStream inputStream, final OutputStream outputStream) throws IOException {
+        if (path.endsWith("openwebbeans.properties")) {
+            inputStream = StreamBuilder.create(inputStream)
+                    .replace("org.apache.webbeans.proxy.mapping.javax.enterprise", "org.apache.webbeans.proxy.mapping.jakarta.enterprise")
+                    .replace("\n        /javax, \\\n", "\n        /javax, \\\n        /jakarta, \\\n")
+                    .replace("javax.enterprise.inject.allowProxying.classes", "jakarta.enterprise.inject.allowProxying.classes")
+                    .get();
+        }
+
         inputStream = StreamBuilder.create(inputStream)
                 .replace("javax.activation", "jakarta.activation")
                 .replace("javax.batch", "jakarta.batch")

@@ -91,6 +91,7 @@ public class MethodTransformer extends MethodVisitor {
                     .replace("javax.persistence.", "jakarta.persistence.")
                     .replace("javax.transaction.TransactionManager", "jakarta.transaction.TransactionManager")
                     .replace("javax.transaction.global.timeout", "jakarta.transaction.global.timeout")
+                    .replace("org.apache.webbeans.proxy.mapping.javax.enterprise", "org.apache.webbeans.proxy.mapping.jakarta.enterprise")
                     .replace("javax.xml.ws.", "jakarta.xml.ws.")
                     .replace("Ljavax/persistence", "Ljakarta/persistence")
                     .get();
