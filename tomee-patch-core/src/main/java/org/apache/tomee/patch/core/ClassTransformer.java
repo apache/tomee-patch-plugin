@@ -39,7 +39,16 @@ public class ClassTransformer extends ClassVisitor {
     }
 
     @Override
-    public FieldVisitor visitField(final int access, final String name, final String descriptor, final String signature, final Object value) {
+    public FieldVisitor visitField(final int access, final String name, final String descriptor, final String signature, Object value) {
+
+        if (value instanceof String) {
+            value = new Replace((String) value)
+                    .replace("javax.faces", "jakarta.faces")
+                    .replace("javax_faces", "jakarta_faces")
+                    .replace("javax.persistence.", "jakarta.persistence.")
+                    .get();
+        }
+
         return new FieldTransformer(this.api, super.visitField(access, name, descriptor, signature, value));
     }
 
@@ -57,4 +66,6 @@ public class ClassTransformer extends ClassVisitor {
     public AnnotationVisitor visitTypeAnnotation(final int typeRef, final TypePath typePath, final String descriptor, final boolean visible) {
         return new AnnotationTransformer(this.api, super.visitTypeAnnotation(typeRef, typePath, descriptor, visible));
     }
+
+
 }
