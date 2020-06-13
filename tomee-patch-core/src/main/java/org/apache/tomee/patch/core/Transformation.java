@@ -140,6 +140,7 @@ public class Transformation {
         if (path.endsWith("META-INF/DEPENDENCIES")) return true;
         if (path.endsWith("META-INF/dependencies.xml")) return true;
         if (path.endsWith("changelog.html")) return true;
+        if (path.endsWith("RELEASE-NOTES.txt")) return true;
         if (path.endsWith("pom.xml")) return true;
         return false;
     }
@@ -154,6 +155,11 @@ public class Transformation {
         }
 
         inputStream = StreamBuilder.create(inputStream)
+                .replace("javax.jsp", "jakarta.servlet.jsp")
+                .replace("serlvet", "servlet")
+                .replace("javax.transaction.TransactionManager", "jakarta.transaction.TransactionManager")
+                .replace("javax.transaction.Transaction", "jakarta.transaction.Transaction")
+                .replace("javax.annotation.Resource", "jakarta.annotation.Resource")
                 .replace("javax.activation", "jakarta.activation")
                 .replace("javax.batch", "jakarta.batch")
                 .replace("javax.decorator", "jakarta.decorator")
