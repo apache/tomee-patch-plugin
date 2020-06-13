@@ -161,6 +161,7 @@ public class Transformation {
                 .replace("javax.xml.bind", "jakarta.xml.bind")
                 .replace("javax.xml.soap", "jakarta.xml.soap")
                 .replace("javax.xml.ws", "jakarta.xml.ws")
+                .replace("javax\\.faces", "jakarta\\.faces") // in some javascript files
                 .get();
         IO.copy(inputStream, outputStream);
     }
