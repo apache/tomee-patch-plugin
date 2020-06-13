@@ -19,6 +19,7 @@ package org.apache.tomee.patch.core;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
+import org.tomitribe.swizzle.stream.StreamBuilder;
 import org.tomitribe.util.IO;
 
 import java.io.File;
@@ -102,7 +103,7 @@ public class Transformation {
                     } else if (isZip(path)) {
                         scanJar(path, zipInputStream, zipOutputStream);
                     } else {
-                        IO.copy(zipInputStream, zipOutputStream);
+                        scanResource(zipInputStream, zipOutputStream);
                     }
                 } finally {
                     zipOutputStream.closeEntry();
@@ -131,6 +132,15 @@ public class Transformation {
         } finally {
             Jar.exit(oldJar);
         }
+    }
+
+    private void scanResource(InputStream inputStream, final OutputStream outputStream) throws IOException {
+        inputStream = StreamBuilder.create(inputStream)
+                .replace("javax.el.ELResolver", "jakarta.el.ELResolver")
+                .replace("javax.servlet.", "jakarta.servlet.")
+                .replace("javax.faces.", "jakarta.faces.")
+                .get();
+        IO.copy(inputStream, outputStream);
     }
 
     private static void copyAttributes(final ZipEntry oldEntry, final ZipEntry newEntry) {
