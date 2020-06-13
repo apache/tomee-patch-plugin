@@ -139,6 +139,9 @@ public class Transformation {
                 .replace("javax.el.ELResolver", "jakarta.el.ELResolver")
                 .replace("javax.servlet.", "jakarta.servlet.")
                 .replace("javax.faces.", "jakarta.faces.")
+                .replace("javax.jms.", "jakarta.jms.")
+                .replace("javax.persistence.", "jakarta.persistence.")
+                .replace("javax.resource.", "jakarta.resource.")
                 .get();
         IO.copy(inputStream, outputStream);
     }
