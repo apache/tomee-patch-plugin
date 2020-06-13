@@ -75,7 +75,7 @@ public class MethodTransformer extends MethodVisitor {
     }
 
     @Override
-    public void visitLdcInsn(final Object cst) {
+    public void visitLdcInsn(Object cst) {
         if (cst instanceof Integer) {
             // ...
         } else if (cst instanceof Float) {
@@ -85,7 +85,16 @@ public class MethodTransformer extends MethodVisitor {
         } else if (cst instanceof Double) {
             // ...
         } else if (cst instanceof String) {
-            // ...
+            cst = new Replace((String) cst)
+                    .replace("javax.faces", "jakarta.faces")
+                    .replace("javax_faces", "jakarta_faces")
+                    .replace("javax.persistence.", "jakarta.persistence.")
+                    .replace("javax.transaction.TransactionManager", "jakarta.transaction.TransactionManager")
+                    .replace("javax.transaction.global.timeout", "jakarta.transaction.global.timeout")
+                    .replace("javax.xml.ws.", "jakarta.xml.ws.")
+                    .replace("Ljavax/persistence", "Ljakarta/persistence")
+                    .get();
+
         } else if (cst instanceof Type) {
             // ...
         } else if (cst instanceof Handle) {

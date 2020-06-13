@@ -29,6 +29,10 @@ public class Replace {
         }
         return this;
     }
+    public Replace replace(final String from, final String to) {
+        text = text.replace(from, to);
+        return this;
+    }
 
     public String get() {
         return text;
