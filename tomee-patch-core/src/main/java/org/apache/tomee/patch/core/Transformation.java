@@ -122,7 +122,7 @@ public class Transformation {
                     zipOutputStream.putNextEntry(newEntry);
 
                     // Run any transformations on these classes as well
-                    scanClass(IO.read(clazz.getFile()), zipOutputStream);
+                    IO.copy(IO.read(clazz.getFile()), zipOutputStream);
 
                     zipOutputStream.closeEntry();
                     clazz.applied();
