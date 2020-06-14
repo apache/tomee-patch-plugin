@@ -81,6 +81,11 @@ public class Transformation {
                 // TODO: the name may be changed in transformation
                 final String path = updatePath(oldEntry.getName());
 
+                if (skip(path)) {
+                    IO.copy(zipInputStream, skipped);
+                    continue;
+                }
+                
                 /*
                  * If this entry has been patched, skip it
                  * We will add the patched version at the end
@@ -137,6 +142,19 @@ public class Transformation {
         }
     }
 
+    /**
+     * Skip signed jar public key files.  We most definitely
+     * have tampered with the jar.
+     */
+    private boolean skip(final String name) {
+        if (name.startsWith("META-INF/")) {
+            if (name.endsWith(".SF")) return true;
+            if (name.endsWith(".DSA")) return true;
+            if (name.endsWith(".RSA")) return true;
+        }
+        return false;
+    }
+    
     private String updatePath(final String name) {
         return name.replace("resources/javax.faces","resources/jakarta.faces");
     }
