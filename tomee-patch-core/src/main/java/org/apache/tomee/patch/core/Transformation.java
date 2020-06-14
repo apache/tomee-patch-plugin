@@ -79,7 +79,7 @@ public class Transformation {
             ZipEntry oldEntry;
             while ((oldEntry = zipInputStream.getNextEntry()) != null) {
                 // TODO: the name may be changed in transformation
-                final String path = oldEntry.getName();
+                final String path = updatePath(oldEntry.getName());
 
                 /*
                  * If this entry has been patched, skip it
@@ -90,6 +90,7 @@ public class Transformation {
                     IO.copy(zipInputStream, skipped);
                     continue;
                 }
+
 
                 final ZipEntry newEntry = new ZipEntry(path);
 
@@ -134,6 +135,10 @@ public class Transformation {
         } finally {
             Jar.exit(oldJar);
         }
+    }
+
+    private String updatePath(final String name) {
+        return name.replace("resources/javax.faces","resources/jakarta.faces");
     }
 
     private boolean copyUnmodified(final String path) {
