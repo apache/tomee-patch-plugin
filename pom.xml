@@ -32,7 +32,7 @@
   <groupId>org.apache.tomee.patch</groupId>
   <artifactId>tomee-patch-parent</artifactId>
   <packaging>pom</packaging>
-  <version>0.2-SNAPSHOT</version>
+  <version>0.2</version>
 
   <name>Apache TomEE Patch Plugin</name>
   <description>Tools and Maven Plugin to help complete the javax-to-jakarta bytecode transformation</description>
@@ -47,7 +47,7 @@
     <connection>scm:git:git@github.com:apache/tomee-patch-plugin.git</connection>
     <url>scm:git:git@github.com:apache/tomee-patch-plugin.git</url>
     <developerConnection>scm:git:git@github.com:apache/tomee-patch-plugin.git</developerConnection>
-    <tag>HEAD</tag>
+    <tag>tomee-patch-parent-0.2</tag>
   </scm>
 
   <issueManagement>
