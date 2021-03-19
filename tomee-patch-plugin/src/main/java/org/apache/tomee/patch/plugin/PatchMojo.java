@@ -86,6 +86,9 @@ public class PatchMojo extends AbstractMojo {
     @Parameter
     private Map<String, String> jdkToolchain;
 
+    @Parameter
+    private Map<String, String> replacements;
+
     /**
      * Sets the executable of the compiler to use when fork is <code>true</code>.
      */
@@ -171,7 +174,7 @@ public class PatchMojo extends AbstractMojo {
 
             final List<Clazz> clazzes = classes();
 
-            final Transformation transformation = new Transformation(clazzes, new MavenLog(getLog()));
+            final Transformation transformation = new Transformation(clazzes, replacements, new MavenLog(getLog()));
             for (final Artifact artifact : artifacts) {
                 final File file = artifact.getFile();
                 getLog().debug("Patching " + file.getAbsolutePath());

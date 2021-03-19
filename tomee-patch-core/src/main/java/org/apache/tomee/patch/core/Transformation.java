@@ -28,8 +28,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -42,15 +44,18 @@ public class Transformation {
 
     private final List<Clazz> classes = new ArrayList<Clazz>();
     private final Log log;
+    private final Map<String, String> replacements;
 
     public Transformation() {
         this.log = new NullLog();
+        this.replacements = Collections.EMPTY_MAP;
     }
 
 
-    public Transformation(final List<Clazz> classes, final Log log) {
+    public Transformation(final List<Clazz> classes, final Map<String, String> replacements, final Log log) {
         this.classes.addAll(classes);
         this.log = log;
+        this.replacements = replacements;
     }
 
     public static File transform(final File jar) throws IOException {
@@ -85,7 +90,7 @@ public class Transformation {
                     IO.copy(zipInputStream, skipped);
                     continue;
                 }
-                
+
                 /*
                  * If this entry has been patched, skip it
                  * We will add the patched version at the end
@@ -154,9 +159,9 @@ public class Transformation {
         }
         return false;
     }
-    
+
     private String updatePath(final String name) {
-        return name.replace("resources/javax.faces","resources/jakarta.faces");
+        return name.replace("resources/javax.faces", "resources/jakarta.faces");
     }
 
     private boolean copyUnmodified(final String path) {
@@ -210,6 +215,16 @@ public class Transformation {
                 .replace("javax.xml.ws", "jakarta.xml.ws")
                 .replace("javax\\.faces", "jakarta\\.faces") // in some javascript files
                 .get();
+
+        {
+            final String name = new File(path).getName();
+            final String replacement = replacements.get(name);
+            if (replacement != null) {
+                log.debug(String.format("Replaced %s with %s", path, replacement));
+                inputStream = IO.read(new File(replacement));
+            }
+        }
+        
         IO.copy(inputStream, outputStream);
     }
 
