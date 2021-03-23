@@ -55,7 +55,7 @@ public class Transformation {
     public Transformation(final List<Clazz> classes, final Map<String, String> replacements, final Log log) {
         this.classes.addAll(classes);
         this.log = log;
-        this.replacements = replacements;
+        this.replacements = replacements == null ? Collections.EMPTY_MAP : replacements;
     }
 
     public static File transform(final File jar) throws IOException {
@@ -224,7 +224,7 @@ public class Transformation {
                 inputStream = IO.read(new File(replacement));
             }
         }
-        
+
         IO.copy(inputStream, outputStream);
     }
 
