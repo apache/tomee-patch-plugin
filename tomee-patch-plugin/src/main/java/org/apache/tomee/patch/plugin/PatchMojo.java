@@ -26,11 +26,13 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
+import org.apache.maven.project.artifact.AttachedArtifact;
 import org.apache.maven.toolchain.Toolchain;
 import org.apache.maven.toolchain.ToolchainManager;
 import org.apache.tomee.patch.core.Clazz;
 import org.apache.tomee.patch.core.Is;
 import org.apache.tomee.patch.core.Transformation;
+import org.apache.tomee.patch.core.ZipToTar;
 import org.codehaus.plexus.compiler.Compiler;
 import org.codehaus.plexus.compiler.CompilerConfiguration;
 import org.codehaus.plexus.compiler.CompilerMessage;
@@ -88,6 +90,9 @@ public class PatchMojo extends AbstractMojo {
 
     @Parameter
     private Map<String, String> replacements;
+
+    @Parameter(defaultValue = "false")
+    private Boolean createTarGz;
 
     /**
      * Sets the executable of the compiler to use when fork is <code>true</code>.
@@ -180,6 +185,22 @@ public class PatchMojo extends AbstractMojo {
                 getLog().debug("Patching " + file.getAbsolutePath());
                 final File patched = transformation.transformArchive(file);
                 IO.copy(patched, file);
+
+                if (createTarGz && file.getName().endsWith(".zip")) {
+                    final File tarGz;
+                    try {
+                        tarGz = ZipToTar.toTarGz(file);
+                    } catch (Exception e) {
+                        getLog().error("Failed to create tar.gz from " + file.getAbsolutePath(), e);
+                        continue;
+                    }
+
+                    final String classifier = artifact.getClassifier();
+                    final AttachedArtifact attachedArtifact = new AttachedArtifact(project.getArtifact(), "tar.gz", classifier, project.getArtifact().getArtifactHandler());
+                    attachedArtifact.setFile(tarGz);
+                    attachedArtifact.setResolved(true);
+                    project.addAttachedArtifact(attachedArtifact);
+                }
             }
 
             transformation.complete();
