@@ -441,12 +441,6 @@ public class PatchMojo extends AbstractMojo {
         }
     }
 
-    private List<String> getPatchSourceLocations() {
-        return patchSources.stream()
-                .map(File::getAbsolutePath)
-                .collect(Collectors.toList());
-    }
-
     //TODO remove the part with ToolchainManager lookup once we depend on
     //3.0.9 (have it as prerequisite). Define as regular component field then.
     protected final Toolchain getToolchain() {
