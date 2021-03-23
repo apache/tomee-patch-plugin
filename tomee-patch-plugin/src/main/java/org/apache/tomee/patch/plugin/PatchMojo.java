@@ -50,6 +50,7 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -259,9 +260,22 @@ public class PatchMojo extends AbstractMojo {
 
     private List<Artifact> getPatchArtifacts() {
         final Predicate<String> match = Pattern.compile(select).asPredicate();
-        return Stream.of(getSourceArtifacts())
+        final Artifact[] available = getSourceArtifacts();
+
+        final List<Artifact> selected = Stream.of(available)
                 .filter(artifact -> match.test(artifact.getFile().getName()))
                 .collect(Collectors.toList());
+
+        if (selected.size() == 0) {
+            final String message = String.format("No artifacts matched expression '%s'.  %s available artifacts:", select, available.length);
+            getLog().error(message);
+            Arrays.stream(available)
+                    .map(artifact -> artifact.getFile().getName())
+                    .forEach(s -> getLog().error(" - " + s));
+
+            throw new NoMatchingArtifactsException(select);
+        }
+        return selected;
     }
 
     private void compile(final File patchSourceDirectory, final List<File> jars) throws MojoExecutionException, CompilationFailureException {
@@ -452,4 +466,9 @@ public class PatchMojo extends AbstractMojo {
         return artifactList.toArray(new Artifact[0]);
     }
 
+    private static class NoMatchingArtifactsException extends RuntimeException {
+        public NoMatchingArtifactsException(final String select) {
+            super(String.format("No artifacts matched expression '%s'", select));
+        }
+    }
 }
