@@ -51,7 +51,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
@@ -69,7 +68,7 @@ public class PatchMojo extends AbstractMojo {
     private MavenSession session;
 
     @Parameter(defaultValue = "${project.basedir}/src/patch/java", required = true)
-    private File patchSourceDirectory;
+    private List<File> patchSources;
 
     /**
      * Regex to identify which archives should be matched
@@ -176,7 +175,7 @@ public class PatchMojo extends AbstractMojo {
             // Extract any zips and return a list of jars
             final List<File> jars = prepareJars(artifacts);
 
-            compile(patchSourceDirectory, jars);
+            compile(jars);
 
             final List<Clazz> clazzes = classes();
 
@@ -278,7 +277,7 @@ public class PatchMojo extends AbstractMojo {
         return selected;
     }
 
-    private void compile(final File patchSourceDirectory, final List<File> jars) throws MojoExecutionException, CompilationFailureException {
+    private void compile(final List<File> jars) throws MojoExecutionException, CompilationFailureException {
 
         getLog().debug("Using compiler '" + compilerId + "'.");
 
@@ -405,12 +404,9 @@ public class PatchMojo extends AbstractMojo {
     }
 
     private List<String> getPatchSourceLocations() {
-        return Collections.singletonList(patchSourceDirectory.getAbsolutePath());
-    }
-
-    private void patch(final Artifact artifact) throws IOException {
-        final File file = artifact.getFile();
-
+        return patchSources.stream()
+                .map(File::getAbsolutePath)
+                .collect(Collectors.toList());
     }
 
     //TODO remove the part with ToolchainManager lookup once we depend on
