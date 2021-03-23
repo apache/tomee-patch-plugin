@@ -47,10 +47,12 @@ import org.tomitribe.util.Zips;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
@@ -69,6 +71,9 @@ public class PatchMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${project.basedir}/src/patch/java", required = true)
     private List<File> patchSources;
+
+    @Parameter
+    private List<String> sourceExcludes = new ArrayList<>();
 
     /**
      * Regex to identify which archives should be matched
@@ -124,6 +129,9 @@ public class PatchMojo extends AbstractMojo {
      */
     @Parameter(defaultValue = "${project.build.directory}/patch-classpath", required = true)
     private File patchClasspathDirectory;
+
+    @Parameter(defaultValue = "${project.build.directory}/patch-sources", required = true)
+    private File patchSourceDirectory;
 
     /**
      * The -encoding argument for the Java compiler.
@@ -296,6 +304,9 @@ public class PatchMojo extends AbstractMojo {
             executable = tc.findTool(compilerId);
         }
 
+        Files.mkdir(patchSourceDirectory);
+        patchSources.forEach(file -> copy(file, file, patchSourceDirectory));
+
 
         final CompilerConfiguration compilerConfiguration = new CompilerConfiguration();
         compilerConfiguration.setOutputLocation(buildDirectory.getAbsolutePath());
@@ -310,7 +321,7 @@ public class PatchMojo extends AbstractMojo {
         compilerConfiguration.setTargetVersion(target);
         compilerConfiguration.setReleaseVersion(null);
         compilerConfiguration.setProc(null);
-        compilerConfiguration.setSourceLocations(getPatchSourceLocations());
+        compilerConfiguration.setSourceLocations(Collections.singletonList(patchSourceDirectory.getAbsolutePath()));
         compilerConfiguration.setAnnotationProcessors(null);
         compilerConfiguration.setSourceEncoding(encoding);
         compilerConfiguration.setFork(true);
@@ -398,6 +409,33 @@ public class PatchMojo extends AbstractMojo {
                     default:
                         getLog().warn(message.toString());
                         break;
+                }
+            }
+        }
+    }
+
+    private void copy(final File root, final File src, final File dest) {
+        copy:
+        for (final File file : src.listFiles()) {
+
+            final String path = file.getAbsolutePath().substring(root.getAbsolutePath().length() + 1);
+
+            for (final String exclude : sourceExcludes) {
+                if (path.matches(exclude)) {
+                    getLog().debug("Exclude source file: " + file.getAbsolutePath());
+                    continue copy;
+                }
+            }
+
+            if (file.isDirectory()) {
+                final File dir = new File(dest, file.getName());
+                Files.mkdir(dir);
+                copy(root, file, dir);
+            } else if (file.isFile()) {
+                try {
+                    IO.copy(file, new File(dest, file.getName()));
+                } catch (IOException e) {
+                    throw new UncheckedIOException("Cannot copy file " + file.getAbsolutePath(), e);
                 }
             }
         }
