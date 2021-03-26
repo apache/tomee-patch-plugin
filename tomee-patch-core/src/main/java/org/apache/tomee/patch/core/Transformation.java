@@ -83,12 +83,15 @@ public class Transformation {
                     throw new ReplacementNotFoundException("jar", jar, file.getAbsolutePath());
                 }
                 log.info(String.format("Replaced %s", name));
+                IO.copy(file, outputStream);
+
                 IO.copy(inputStream, new OutputStream() {
                     @Override
                     public void write(final int b) throws IOException {
                     }
                 });
-                IO.copy(file, outputStream);
+
+                return;
             }
         }
 
