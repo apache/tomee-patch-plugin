@@ -31,6 +31,7 @@ import org.apache.maven.toolchain.Toolchain;
 import org.apache.maven.toolchain.ToolchainManager;
 import org.apache.tomee.patch.core.Clazz;
 import org.apache.tomee.patch.core.Is;
+import org.apache.tomee.patch.core.Replacements;
 import org.apache.tomee.patch.core.Transformation;
 import org.apache.tomee.patch.core.ZipToTar;
 import org.codehaus.plexus.compiler.Compiler;
@@ -94,7 +95,7 @@ public class PatchMojo extends AbstractMojo {
     private Map<String, String> jdkToolchain;
 
     @Parameter
-    private Map<String, String> replacements;
+    private Replacements replace;
 
     @Parameter(defaultValue = "false")
     private Boolean createTarGz;
@@ -187,7 +188,7 @@ public class PatchMojo extends AbstractMojo {
 
             final List<Clazz> clazzes = classes();
 
-            final Transformation transformation = new Transformation(clazzes, replacements, new MavenLog(getLog()));
+            final Transformation transformation = new Transformation(clazzes, replace, new MavenLog(getLog()));
             for (final Artifact artifact : artifacts) {
                 final File file = artifact.getFile();
                 getLog().debug("Patching " + file.getAbsolutePath());

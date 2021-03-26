@@ -21,6 +21,7 @@ import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 import org.tomitribe.swizzle.stream.StreamBuilder;
 import org.tomitribe.util.IO;
+import org.tomitribe.util.Mvn;
 
 import java.io.File;
 import java.io.IOException;
@@ -28,10 +29,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -44,18 +43,18 @@ public class Transformation {
 
     private final List<Clazz> classes = new ArrayList<Clazz>();
     private final Log log;
-    private final Map<String, String> replacements;
+    private final Replacements replacements;
 
     public Transformation() {
         this.log = new NullLog();
-        this.replacements = Collections.EMPTY_MAP;
+        this.replacements = new Replacements();
     }
 
 
-    public Transformation(final List<Clazz> classes, final Map<String, String> replacements, final Log log) {
+    public Transformation(final List<Clazz> classes, final Replacements replacements, final Log log) {
         this.classes.addAll(classes);
         this.log = log;
-        this.replacements = replacements == null ? Collections.EMPTY_MAP : replacements;
+        this.replacements = replacements == null ? new Replacements() : replacements;
     }
 
     public static File transform(final File jar) throws IOException {
@@ -75,6 +74,24 @@ public class Transformation {
     }
 
     private void scanJar(final String name, final InputStream inputStream, final OutputStream outputStream) throws IOException {
+        {
+            final String jar = new File(name).getName();
+            final String replacement = replacements.getJars().get(jar);
+            if (replacement != null) {
+                final File file = Mvn.mvn(replacement);
+                if (!file.exists()) {
+                    throw new ReplacementNotFoundException("jar", jar, file.getAbsolutePath());
+                }
+                log.info(String.format("Replaced %s", name));
+                IO.copy(inputStream, new OutputStream() {
+                    @Override
+                    public void write(final int b) throws IOException {
+                    }
+                });
+                IO.copy(file, outputStream);
+            }
+        }
+
         final Jar oldJar = Jar.enter(name);
         final Jar jar = Jar.current();
         try {
@@ -218,10 +235,14 @@ public class Transformation {
 
         {
             final String name = new File(path).getName();
-            final String replacement = replacements.get(name);
+            final String replacement = replacements.getResources().get(name);
             if (replacement != null) {
-                log.debug(String.format("Replaced %s with %s", path, replacement));
-                inputStream = IO.read(new File(replacement));
+                log.info(String.format("Replaced %s", path));
+                final File file = new File(replacement);
+                if (!file.exists()) {
+                    throw new ReplacementNotFoundException("resource", path, file.getAbsolutePath());
+                }
+                inputStream = IO.read(file);
             }
         }
 
