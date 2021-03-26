@@ -44,17 +44,20 @@ public class Transformation {
     private final List<Clazz> classes = new ArrayList<Clazz>();
     private final Log log;
     private final Replacements replacements;
+    private final Boolean skipTransform;
 
     public Transformation() {
         this.log = new NullLog();
         this.replacements = new Replacements();
+        this.skipTransform = false;
     }
 
 
-    public Transformation(final List<Clazz> classes, final Replacements replacements, final Log log) {
+    public Transformation(final List<Clazz> classes, final Replacements replacements, final Log log, final Boolean skipTransform) {
         this.classes.addAll(classes);
         this.log = log;
         this.replacements = replacements == null ? new Replacements() : replacements;
+        this.skipTransform = skipTransform;
     }
 
     public static File transform(final File jar) throws IOException {
@@ -85,11 +88,7 @@ public class Transformation {
                 log.info(String.format("Replaced %s", name));
                 IO.copy(file, outputStream);
 
-                IO.copy(inputStream, new OutputStream() {
-                    @Override
-                    public void write(final int b) throws IOException {
-                    }
-                });
+                IO.copy(inputStream, skipped);
 
                 return;
             }
@@ -194,6 +193,28 @@ public class Transformation {
     }
 
     private void scanResource(final String path, InputStream inputStream, final OutputStream outputStream) throws IOException {
+
+        {
+            final String name = new File(path).getName();
+            final String replacement = replacements.getResources().get(name);
+            if (replacement != null) {
+                log.info(String.format("Replaced %s", path));
+                final File file = new File(replacement);
+                if (!file.exists()) {
+                    throw new ReplacementNotFoundException("resource", path, file.getAbsolutePath());
+                }
+                inputStream = IO.read(file);
+                IO.copy(inputStream, outputStream);
+                return;
+            }
+        }
+
+        // in case we don't want to apply any transformation. Only replacement will happen
+        if (skipTransform) {
+            return;
+        }
+
+
         if (path.endsWith("openwebbeans.properties")) {
             inputStream = StreamBuilder.create(inputStream)
                     .replace("org.apache.webbeans.proxy.mapping.javax.enterprise", "org.apache.webbeans.proxy.mapping.jakarta.enterprise")
@@ -236,19 +257,6 @@ public class Transformation {
                 .replace("javax\\.faces", "jakarta\\.faces") // in some javascript files
                 .get();
 
-        {
-            final String name = new File(path).getName();
-            final String replacement = replacements.getResources().get(name);
-            if (replacement != null) {
-                log.info(String.format("Replaced %s", path));
-                final File file = new File(replacement);
-                if (!file.exists()) {
-                    throw new ReplacementNotFoundException("resource", path, file.getAbsolutePath());
-                }
-                inputStream = IO.read(file);
-            }
-        }
-
         IO.copy(inputStream, outputStream);
     }
 
@@ -267,7 +275,14 @@ public class Transformation {
         return Is.Zip.accept(path);
     }
 
-    private static void scanClass(final InputStream in, final OutputStream outputStream) throws IOException {
+    private void scanClass(final InputStream in, final OutputStream outputStream) throws IOException {
+
+        // in case we don't want to apply any transformation. Only replacement will happen
+        if (skipTransform) {
+            IO.copy(in, outputStream);
+            return;
+        }
+
         final ClassWriter classWriter = new ClassWriter(Opcodes.ASM8);
         final ClassTransformer classTransformer = new ClassTransformer(classWriter);
         final ClassReader classReader = new ClassReader(in);
