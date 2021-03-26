@@ -305,6 +305,18 @@ public class PatchMojo extends AbstractMojo {
         }
 
         Files.mkdir(patchSourceDirectory);
+        for (final File patchSource : patchSources) {
+            if (!patchSource.exists()) {
+                final String message = "Patch source directory does not exist: " + patchSource.getAbsolutePath();
+                getLog().error(message);
+                throw new MojoExecutionException(message);
+            }
+            if (!patchSource.isDirectory()) {
+                final String message = "Patch source directory is not a directory: " + patchSource.getAbsolutePath();
+                getLog().error(message);
+                throw new MojoExecutionException(message);
+            }
+        }
         patchSources.forEach(file -> copy(file, file, patchSourceDirectory));
 
 
