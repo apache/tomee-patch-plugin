@@ -383,7 +383,9 @@ public class Transformation {
 
     private boolean isPatched(final String path, final Jar jar) {
         for (final Clazz clazz : classes) {
-            if (path.startsWith(clazz.getPrefix())) {
+            if (path.equals(clazz.getName()) ||
+                    path.startsWith(clazz.getPrefix() + "$")) {
+
                 jar.patch(clazz, classes);
                 return true;
             }
