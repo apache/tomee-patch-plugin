@@ -1,0 +1,38 @@
+In the configuration of the plugin you can have a directive like the following:
+
+       <configuration>
+         <select>tomee-plume-webapp-transformed-.*\.war</select>
+         <patchSources>
+           <source>${project.basedir}/../../transform/src/patch/java/</source>
+           <source>${project.basedir}/src/patch/java/</source>
+         </patchSources>
+         <replace>
+           <jars>
+             <jakarta.faces-3.0.0.jar>org.glassfish:jakarta.faces:jar:3.0.0</jakarta.faces-3.0.0.jar>
+             <eclipselink-3.0.0.jar>org.eclipse.persistence:eclipselink:jar:3.0.0</eclipselink-3.0.0.jar>
+           </jars>
+           <resources>
+             <openejb-version.properties>${project.build.outputDirectory}/openejb-version.properties</openejb-version.properties>
+           </resources>
+         </replace>
+       </configuration>
+
+## select
+
+The `<select>` setting is what tells the plugin which binaries to modify.  In the above setting we're saying we want to patch the output of the Eclipse Transformer.  The input to the transformer is the regular `tomee-plume-webapp-9.0.0-M123-SNAPSHOT.war` file and the output is a new `tomee-plume-webapp-transformed-9.0.0-M123-SNAPSHOT.war` file.  It's the "transformed" file we want to further patch.
+
+## patchSources
+
+The `<patchSources>` list allows us to specify locations where *.java files live.  We will copy these into the `target/` directory and compile them using any *.jar files we find in the war file to create the classpath.  These compiled classes are then used to overwrite any classes by that name in any part of the war or its libraries.  This is how we handle corner cases that are too complicated to deal with using bytecode tools -- we can just specify an alternate source file.
+
+Being able to have multiple locations for patch files keeps us from having to duplicate patch files as we build multiple war files in multiple modules.  The above configuration says grab the *.java files from the `transform` module and the *.java files from this module.
+
+## replace/jars
+
+The `<replace><jars>` list allows us to tell the plugin, "when you see a `jakarta.faces-3.0.0.jar` in the war file, replace it with the `org.glassfish:jakarta.faces:jar:3.0.0` artifact from our local maven repo."  We can use this to effectively restore any jars we do not want the Eclipse Transformer to modify.  This will be any jar file that already fully supports the Jakarta namespace, like the latest Eclipselink, Mojarra or MyFaces.  Of course in theory the Transformer shouldn't have a negative impact on jars that already support the new namespace, but why risk it when it's easy to gain 100% confidence the jar we ship is byte for byte the same one produced by the respective project.
+
+This setting could potentially also be used to do library upgrades via the patch plugin.
+
+## replace/resources
+
+The `<replace><jars>` list allows us to tell the plugin, "when you see an `openejb-version.properties` file anywhere in the war file or its libraries, replace it with the specially modified version from `target/classes/`."  In the module we're generating a new `openejb-version.properties` so we can change the version TomEE reports from "8.0.7-SNAPSHOT" to "9.0.0-M7-SNAPSHOT"
