@@ -1,21 +1,34 @@
 In the configuration of the plugin you can have a directive like the following:
 
-       <configuration>
-         <select>tomee-plume-webapp-transformed-.*\.war</select>
-         <patchSources>
-           <source>${project.basedir}/../../transform/src/patch/java/</source>
-           <source>${project.basedir}/src/patch/java/</source>
-         </patchSources>
-         <replace>
-           <jars>
-             <jakarta.faces-3.0.0.jar>org.glassfish:jakarta.faces:jar:3.0.0</jakarta.faces-3.0.0.jar>
-             <eclipselink-3.0.0.jar>org.eclipse.persistence:eclipselink:jar:3.0.0</eclipselink-3.0.0.jar>
-           </jars>
-           <resources>
-             <openejb-version.properties>${project.build.outputDirectory}/openejb-version.properties</openejb-version.properties>
-           </resources>
-         </replace>
-       </configuration>
+      <plugin>
+        <groupId>org.apache.tomee.patch</groupId>
+        <artifactId>tomee-patch-plugin</artifactId>
+        <version>0.4-SNAPSHOT</version>
+        <configuration>
+          <select>tomee-plume-webapp-transformed-.*\.war</select>
+          <patchSources>
+            <source>${project.basedir}/../../transform/src/patch/java/</source>
+            <source>${project.basedir}/src/patch/java/</source>
+          </patchSources>
+          <replace>
+            <jars>
+              <jakarta.faces-3.0.0.jar>org.glassfish:jakarta.faces:jar:3.0.0</jakarta.faces-3.0.0.jar>
+              <eclipselink-3.0.0.jar>org.eclipse.persistence:eclipselink:jar:3.0.0</eclipselink-3.0.0.jar>
+            </jars>
+            <resources>
+              <openejb-version.properties>${project.build.outputDirectory}/openejb-version.properties</openejb-version.properties>
+            </resources>
+          </replace>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>run</goal>
+            </goals>
+            <phase>package</phase>
+          </execution>
+        </executions>
+      </plugin>
 
 ## select
 
