@@ -211,6 +211,7 @@ public class Transformation {
 
         // in case we don't want to apply any transformation. Only replacement will happen
         if (skipTransform) {
+            IO.copy(inputStream, outputStream);
             return;
         }
 
