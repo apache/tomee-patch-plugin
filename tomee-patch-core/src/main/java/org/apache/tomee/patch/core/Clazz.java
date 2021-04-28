@@ -22,13 +22,19 @@ import java.util.Objects;
 public class Clazz {
     private final String name;
     private final String prefix;
+    private final String packge;
     private final File file;
     private int applied;
 
     public Clazz(final String name, final File file) {
         this.name = name;
         this.prefix = name.replaceAll("\\.class$", "");
+        this.packge = asPackage(name);
         this.file = file;
+    }
+
+    public static String asPackage(final String path) {
+        return path.replaceAll("[^/]+\\.class$", "");
     }
 
     public void applied() {
@@ -53,6 +59,10 @@ public class Clazz {
 
     public File getFile() {
         return file;
+    }
+
+    public String getPackge() {
+        return packge;
     }
 
     @Override
