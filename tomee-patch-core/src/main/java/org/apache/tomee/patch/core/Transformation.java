@@ -16,6 +16,14 @@
  */
 package org.apache.tomee.patch.core;
 
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Opcodes;
+import org.tomitribe.swizzle.stream.StreamBuilder;
+import org.tomitribe.util.IO;
+import org.tomitribe.util.Mvn;
+import org.tomitribe.util.dir.Dir;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,17 +33,11 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
-
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassWriter;
-import org.objectweb.asm.Opcodes;
-import org.tomitribe.swizzle.stream.StreamBuilder;
-import org.tomitribe.util.IO;
-import org.tomitribe.util.Mvn;
 
 import static org.tomitribe.jkta.util.Predicates.not;
 
@@ -44,19 +46,25 @@ public class Transformation {
     private final List<Clazz> classes = new ArrayList<Clazz>();
     private final Log log;
     private final Replacements replacements;
+    private final Additions additions;
     private final Boolean skipTransform;
+    private final File patchResources;
 
     public Transformation() {
         this.log = new NullLog();
         this.replacements = new Replacements();
+        this.additions = new Additions();
         this.skipTransform = false;
+        this.patchResources = new File("does not exist");
     }
 
 
-    public Transformation(final List<Clazz> classes, final Replacements replacements, final Log log, final Boolean skipTransform) {
+    public Transformation(final List<Clazz> classes, final File patchResources, final Replacements replacements, final Additions additions, final Log log, final Boolean skipTransform) {
         this.classes.addAll(classes);
         this.log = log;
         this.replacements = replacements == null ? new Replacements() : replacements;
+        this.additions = additions == null ? new Additions() : additions;
+        this.patchResources = patchResources;
         this.skipTransform = skipTransform;
     }
 
@@ -158,11 +166,73 @@ public class Transformation {
                     clazz.applied();
                 }
             }
+
+            final String jarName = new File(jar.getName()).getName();
+            if (additions.getResources().containsKey(jarName) && patchResources.exists()) {
+                final String regex = additions.getResources().get(jarName);
+                final Pattern pattern = getPattern(regex);
+
+                final Dir dir = Dir.of(Dir.class, patchResources);
+                final List<Resource> resources = dir.files()
+                        .map(file -> Resource.relative(patchResources, file))
+                        .filter(resource -> resource.matches(pattern))
+                        .collect(Collectors.toList());
+
+                for (final Resource resource : resources) {
+                    log.info("Adding " + resource.getPath());
+
+                    final ZipEntry newEntry = new ZipEntry(resource.getPath());
+                    zipOutputStream.putNextEntry(newEntry);
+
+                    // Run any transformations on these classes as well
+                    IO.copy(IO.read(resource.getFile()), zipOutputStream);
+
+                    zipOutputStream.closeEntry();
+                }
+            }
+
             zipOutputStream.finish();
         } catch (IOException e) {
             throw new IOException(jar.getPath() + e.getMessage(), e);
         } finally {
             Jar.exit(oldJar);
+        }
+    }
+
+    private Pattern getPattern(final String regex) {
+        try {
+            return Pattern.compile(regex);
+        } catch (Exception e) {
+            log.error(String.format("Invalid pattern: '%s'", regex));
+            return null;
+        }
+    }
+
+    public static class Resource {
+        private final File file;
+        private final String path;
+
+        public Resource(final File file, final String path) {
+            this.file = file;
+            this.path = path;
+        }
+
+        public File getFile() {
+            return file;
+        }
+
+        public String getPath() {
+            return path;
+        }
+
+        public boolean matches(final Pattern pattern) {
+            return pattern != null && pattern.matcher(path).matches();
+        }
+
+        public static Resource relative(final File parent, final File file) {
+            final int i = parent.getAbsolutePath().length() + 1;
+            final String path = file.getAbsolutePath().substring(i);
+            return new Resource(file, path);
         }
     }
 

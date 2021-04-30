@@ -45,6 +45,7 @@ import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.artifact.AttachedArtifact;
 import org.apache.maven.toolchain.Toolchain;
 import org.apache.maven.toolchain.ToolchainManager;
+import org.apache.tomee.patch.core.Additions;
 import org.apache.tomee.patch.core.Clazz;
 import org.apache.tomee.patch.core.Is;
 import org.apache.tomee.patch.core.Replacements;
@@ -75,6 +76,9 @@ public class PatchMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.basedir}/src/patch/java", required = true)
     private List<File> patchSources;
 
+    @Parameter(defaultValue = "${project.basedir}/src/patch/resources", required = true)
+    private List<File> patchResources;
+
     @Parameter
     private List<String> sourceExcludes = new ArrayList<>();
 
@@ -98,6 +102,9 @@ public class PatchMojo extends AbstractMojo {
 
     @Parameter
     private Replacements replace;
+
+    @Parameter
+    private Additions add;
 
     @Parameter(defaultValue = "false")
     private Boolean createTarGz;
@@ -141,6 +148,9 @@ public class PatchMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "${project.build.directory}/patch-sources", required = true)
     private File patchSourceDirectory;
+
+    @Parameter(defaultValue = "${project.build.directory}/patch-resources", required = true)
+    private File patchResourceDirectory;
 
     /**
      * The -encoding argument for the Java compiler.
@@ -190,6 +200,8 @@ public class PatchMojo extends AbstractMojo {
             // Select the zip files and jars we'll be potentially patching
             final List<Artifact> artifacts = getPatchArtifacts();
 
+            prepareResources();
+            
             // Extract any zips and return a list of jars
             final List<File> jars = prepareJars(artifacts);
 
@@ -197,7 +209,7 @@ public class PatchMojo extends AbstractMojo {
 
             final List<Clazz> clazzes = classes();
 
-            final Transformation transformation = new Transformation(clazzes, replace, new MavenLog(getLog()), skipTransform);
+            final Transformation transformation = new Transformation(clazzes, patchResourceDirectory, replace, add, new MavenLog(getLog()), skipTransform);
             for (final Artifact artifact : artifacts) {
                 final File file = artifact.getFile();
                 getLog().debug("Patching " + file.getAbsolutePath());
@@ -225,6 +237,23 @@ public class PatchMojo extends AbstractMojo {
         } catch (IOException e) {
             throw new MojoExecutionException("Error occurred during execution", e);
         }
+    }
+
+    private void prepareResources() throws MojoExecutionException {
+        Files.mkdir(patchResourceDirectory);
+        for (final File patchResource : patchResources) {
+            if (!patchResource.exists()) {
+                final String message = "Patch resource directory does not exist: " + patchResource.getAbsolutePath();
+                getLog().error(message);
+                throw new MojoExecutionException(message);
+            }
+            if (!patchResource.isDirectory()) {
+                final String message = "Patch resource directory is not a directory: " + patchResource.getAbsolutePath();
+                getLog().error(message);
+                throw new MojoExecutionException(message);
+            }
+        }
+        patchResources.forEach(file -> copy(file, file, patchResourceDirectory));
     }
 
     private List<Clazz> classes() {
