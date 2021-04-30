@@ -16,6 +16,22 @@
  */
 package org.apache.tomee.patch.plugin;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
@@ -42,24 +58,10 @@ import org.codehaus.plexus.compiler.manager.CompilerManager;
 import org.codehaus.plexus.compiler.manager.NoSuchCompilerException;
 import org.tomitribe.jkta.usage.Dir;
 import org.tomitribe.jkta.util.Paths;
+import org.tomitribe.swizzle.stream.StreamBuilder;
 import org.tomitribe.util.Files;
 import org.tomitribe.util.IO;
 import org.tomitribe.util.Zips;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Predicate;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Mojo(name = "run", requiresDependencyResolution = ResolutionScope.RUNTIME_PLUS_SYSTEM, defaultPhase = LifecyclePhase.PACKAGE, requiresProject = true, threadSafe = true)
 public class PatchMojo extends AbstractMojo {
@@ -102,6 +104,9 @@ public class PatchMojo extends AbstractMojo {
 
     @Parameter(defaultValue = "false")
     private Boolean skipTransform;
+
+    @Parameter(defaultValue = "false")
+    private Boolean transformSources;
 
     /**
      * Sets the executable of the compiler to use when fork is <code>true</code>.
@@ -175,6 +180,7 @@ public class PatchMojo extends AbstractMojo {
 
     /**
      * Main execution point of the plugin. This looks at the attached artifacts, and runs the transformer on them.
+     *
      * @throws MojoExecutionException Thrown if there is an error during plugin execution
      */
     public void execute() throws MojoExecutionException, CompilationFailureException {
@@ -448,14 +454,84 @@ public class PatchMojo extends AbstractMojo {
                 Files.mkdir(dir);
                 copy(root, file, dir);
             } else if (file.isFile()) {
-                try {
-                    IO.copy(file, new File(dest, file.getName()));
+                try (InputStream in = IO.read(file)) {
+                    if (!skipTransform && transformSources) {
+                        IO.copy(updateImports(in), new File(dest, file.getName()));
+                    } else {
+                        IO.copy(in, new File(dest, file.getName()));
+                    }
                 } catch (IOException e) {
                     throw new UncheckedIOException("Cannot copy file " + file.getAbsolutePath(), e);
                 }
             }
         }
     }
+
+    private InputStream updateImports(final InputStream in) {
+        return StreamBuilder.create(in)
+                .replace("import javax.activation", "import jakarta.activation")
+                .replace("import javax.annotation", "import jakarta.annotation")
+                .replace("import javax.batch", "import jakarta.batch")
+                .replace("import javax.decorator", "import jakarta.decorator")
+                .replace("import javax.ejb", "import jakarta.ejb")
+                .replace("import javax.el", "import jakarta.el")
+                .replace("import javax.enterprise", "import jakarta.enterprise")
+                .replace("import javax.inject", "import jakarta.inject")
+                .replace("import javax.interceptor", "import jakarta.interceptor")
+                .replace("import javax.jms", "import jakarta.jms")
+                .replace("import javax.json", "import jakarta.json")
+                .replace("import javax.json.bind", "import jakarta.json.bind")
+                .replace("import javax.jws", "import jakarta.jws")
+                .replace("import javax.mail", "import jakarta.mail")
+                .replace("import javax.persistence", "import jakarta.persistence")
+                .replace("import javax.resource", "import jakarta.resource")
+                .replace("import javax.security.auth.message", "import jakarta.security.auth.message")
+                .replace("import javax.security.enterprise", "import jakarta.security.enterprise")
+                .replace("import javax.security.jacc", "import jakarta.security.jacc")
+                .replace("import javax.servlet", "import jakarta.servlet")
+                .replace("import javax.transaction", "import jakarta.transaction")
+                .replace("import javax.validation", "import jakarta.validation")
+                .replace("import javax.websocket", "import jakarta.websocket")
+                .replace("import javax.ws.rs", "import jakarta.ws.rs")
+                .replace("import javax.xml.bind", "import jakarta.xml.bind")
+                .replace("import javax.xml.soap", "import jakarta.xml.soap")
+                .replace("import javax.xml.ws", "import jakarta.xml.ws")
+                .replace("import static javax.activation", "import static jakarta.activation")
+                .replace("import static javax.annotation", "import static jakarta.annotation")
+                .replace("import static javax.batch", "import static jakarta.batch")
+                .replace("import static javax.decorator", "import static jakarta.decorator")
+                .replace("import static javax.ejb", "import static jakarta.ejb")
+                .replace("import static javax.el", "import static jakarta.el")
+                .replace("import static javax.enterprise", "import static jakarta.enterprise")
+                .replace("import static javax.inject", "import static jakarta.inject")
+                .replace("import static javax.interceptor", "import static jakarta.interceptor")
+                .replace("import static javax.jms", "import static jakarta.jms")
+                .replace("import static javax.json", "import static jakarta.json")
+                .replace("import static javax.json.bind", "import static jakarta.json.bind")
+                .replace("import static javax.jws", "import static jakarta.jws")
+                .replace("import static javax.mail", "import static jakarta.mail")
+                .replace("import static javax.persistence", "import static jakarta.persistence")
+                .replace("import static javax.resource", "import static jakarta.resource")
+                .replace("import static javax.security.auth.message", "import static jakarta.security.auth.message")
+                .replace("import static javax.security.enterprise", "import static jakarta.security.enterprise")
+                .replace("import static javax.security.jacc", "import static jakarta.security.jacc")
+                .replace("import static javax.servlet", "import static jakarta.servlet")
+                .replace("import static javax.transaction", "import static jakarta.transaction")
+                .replace("import static javax.validation", "import static jakarta.validation")
+                .replace("import static javax.websocket", "import static jakarta.websocket")
+                .replace("import static javax.ws.rs", "import static jakarta.ws.rs")
+                .replace("import static javax.xml.bind", "import static jakarta.xml.bind")
+                .replace("import static javax.xml.soap", "import static jakarta.xml.soap")
+                .replace("import static javax.xml.ws", "import static jakarta.xml.ws")
+
+                // These sub packages to the above must be renamed back
+                .replace("jakarta.annotation.process", "javax.annotation.process")
+                .replace("jakarta.enterprise.deploy", "javax.enterprise.deploy")
+                .replace("jakarta.transaction.xa", "javax.transaction.xa")
+                .get()
+                ;
+    }
+
 
     //TODO remove the part with ToolchainManager lookup once we depend on
     //3.0.9 (have it as prerequisite). Define as regular component field then.
@@ -493,6 +569,7 @@ public class PatchMojo extends AbstractMojo {
 
     /**
      * Gets the source artifacts that should be transformed
+     *
      * @return an array to artifacts to be transformed
      */
     public Artifact[] getSourceArtifacts() {
