@@ -240,9 +240,18 @@ public class PatchMojo extends AbstractMojo {
     }
 
     private void prepareResources() throws MojoExecutionException {
+        final File defaultPatchResources = new File(basedir, "src/patch/resources");
+
         Files.mkdir(patchResourceDirectory);
         for (final File patchResource : patchResources) {
             if (!patchResource.exists()) {
+
+                if (patchResource.getAbsolutePath().equals(defaultPatchResources.getAbsolutePath())){
+                    // If the default directory does not exist, the user likely did not explicitly
+                    // ask for it.  Just silently skip it.
+                    continue;
+                }
+
                 final String message = "Patch resource directory does not exist: " + patchResource.getAbsolutePath();
                 getLog().error(message);
                 throw new MojoExecutionException(message);
@@ -343,9 +352,17 @@ public class PatchMojo extends AbstractMojo {
             executable = tc.findTool(compilerId);
         }
 
+        final File defaultPatchSources = new File(basedir, "src/patch/java");
         Files.mkdir(patchSourceDirectory);
         for (final File patchSource : patchSources) {
             if (!patchSource.exists()) {
+
+                if (patchSource.getAbsolutePath().equals(defaultPatchSources.getAbsolutePath())){
+                    // If the default directory does not exist, the user likely did not explicitly
+                    // ask for it.  Just silently skip it.
+                    continue;
+                }
+
                 final String message = "Patch source directory does not exist: " + patchSource.getAbsolutePath();
                 getLog().error(message);
                 throw new MojoExecutionException(message);
