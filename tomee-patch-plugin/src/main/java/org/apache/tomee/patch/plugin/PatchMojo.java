@@ -16,22 +16,6 @@
  */
 package org.apache.tomee.patch.plugin;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Predicate;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
 import org.apache.maven.artifact.Artifact;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
@@ -63,6 +47,23 @@ import org.tomitribe.swizzle.stream.StreamBuilder;
 import org.tomitribe.util.Files;
 import org.tomitribe.util.IO;
 import org.tomitribe.util.Zips;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Mojo(name = "run", requiresDependencyResolution = ResolutionScope.RUNTIME_PLUS_SYSTEM, defaultPhase = LifecyclePhase.PACKAGE, requiresProject = true, threadSafe = true)
 public class PatchMojo extends AbstractMojo {
@@ -201,7 +202,7 @@ public class PatchMojo extends AbstractMojo {
             final List<Artifact> artifacts = getPatchArtifacts();
 
             prepareResources();
-            
+
             // Extract any zips and return a list of jars
             final List<File> jars = prepareJars(artifacts);
 
@@ -244,9 +245,10 @@ public class PatchMojo extends AbstractMojo {
 
         Files.mkdir(patchResourceDirectory);
         for (final File patchResource : patchResources) {
+            if (patchResource == null) continue;
             if (!patchResource.exists()) {
 
-                if (patchResource.getAbsolutePath().equals(defaultPatchResources.getAbsolutePath())){
+                if (patchResource.getAbsolutePath().equals(defaultPatchResources.getAbsolutePath())) {
                     // If the default directory does not exist, the user likely did not explicitly
                     // ask for it.  Just silently skip it.
                     continue;
@@ -262,7 +264,10 @@ public class PatchMojo extends AbstractMojo {
                 throw new MojoExecutionException(message);
             }
         }
-        patchResources.forEach(file -> copy(file, file, patchResourceDirectory));
+        patchResources.stream()
+                .filter(Objects::nonNull)
+                .filter(File::exists)
+                .forEach(file -> copy(file, file, patchResourceDirectory));
     }
 
     private List<Clazz> classes() {
@@ -355,9 +360,10 @@ public class PatchMojo extends AbstractMojo {
         final File defaultPatchSources = new File(basedir, "src/patch/java");
         Files.mkdir(patchSourceDirectory);
         for (final File patchSource : patchSources) {
+            if (patchSource == null) continue;
             if (!patchSource.exists()) {
 
-                if (patchSource.getAbsolutePath().equals(defaultPatchSources.getAbsolutePath())){
+                if (patchSource.getAbsolutePath().equals(defaultPatchSources.getAbsolutePath())) {
                     // If the default directory does not exist, the user likely did not explicitly
                     // ask for it.  Just silently skip it.
                     continue;
@@ -373,7 +379,10 @@ public class PatchMojo extends AbstractMojo {
                 throw new MojoExecutionException(message);
             }
         }
-        patchSources.forEach(file -> copy(file, file, patchSourceDirectory));
+        patchSources.stream()
+                .filter(Objects::nonNull)
+                .filter(File::exists)
+                .forEach(file -> copy(file, file, patchSourceDirectory));
 
 
         final CompilerConfiguration compilerConfiguration = new CompilerConfiguration();
