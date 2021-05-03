@@ -17,16 +17,35 @@
 package org.apache.tomee.patch.plugin;
 
 import org.apache.maven.artifact.Artifact;
+import org.apache.maven.artifact.handler.ArtifactHandler;
+import org.apache.maven.artifact.handler.manager.ArtifactHandlerManager;
+import org.apache.maven.artifact.repository.ArtifactRepository;
+import org.apache.maven.artifact.repository.ArtifactRepositoryPolicy;
+import org.apache.maven.artifact.repository.MavenArtifactRepository;
+import org.apache.maven.artifact.repository.layout.ArtifactRepositoryLayout;
 import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
+import org.apache.maven.plugin.MojoFailureException;
 import org.apache.maven.plugins.annotations.Component;
 import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
+import org.apache.maven.project.DefaultProjectBuildingRequest;
 import org.apache.maven.project.MavenProject;
+import org.apache.maven.project.ProjectBuildingRequest;
 import org.apache.maven.project.artifact.AttachedArtifact;
+import org.apache.maven.repository.RepositorySystem;
+import org.apache.maven.settings.Settings;
+import org.apache.maven.shared.transfer.artifact.ArtifactCoordinate;
+import org.apache.maven.shared.transfer.artifact.DefaultArtifactCoordinate;
+import org.apache.maven.shared.transfer.artifact.resolve.ArtifactResolver;
+import org.apache.maven.shared.transfer.artifact.resolve.ArtifactResolverException;
+import org.apache.maven.shared.transfer.dependencies.DefaultDependableCoordinate;
+import org.apache.maven.shared.transfer.dependencies.DependableCoordinate;
+import org.apache.maven.shared.transfer.dependencies.resolve.DependencyResolver;
+import org.apache.maven.shared.transfer.dependencies.resolve.DependencyResolverException;
 import org.apache.maven.toolchain.Toolchain;
 import org.apache.maven.toolchain.ToolchainManager;
 import org.apache.tomee.patch.core.Additions;
@@ -41,6 +60,7 @@ import org.codehaus.plexus.compiler.CompilerMessage;
 import org.codehaus.plexus.compiler.CompilerResult;
 import org.codehaus.plexus.compiler.manager.CompilerManager;
 import org.codehaus.plexus.compiler.manager.NoSuchCompilerException;
+import org.codehaus.plexus.util.StringUtils;
 import org.tomitribe.jkta.usage.Dir;
 import org.tomitribe.jkta.util.Paths;
 import org.tomitribe.swizzle.stream.StreamBuilder;
@@ -62,12 +82,63 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Mojo(name = "run", requiresDependencyResolution = ResolutionScope.RUNTIME_PLUS_SYSTEM, defaultPhase = LifecyclePhase.PACKAGE, requiresProject = true, threadSafe = true)
 public class PatchMojo extends AbstractMojo {
+
+    private static final Pattern ALT_REPO_SYNTAX_PATTERN = Pattern.compile("(.+)::(.*)::(.+)");
+
+    @Component
+    private ArtifactResolver artifactResolver;
+
+    @Component
+    private DependencyResolver dependencyResolver;
+
+    @Component
+    private ArtifactHandlerManager artifactHandlerManager;
+
+    /**
+     * Map that contains the layouts.
+     */
+    @Component(role = ArtifactRepositoryLayout.class)
+    private Map<String, ArtifactRepositoryLayout> repositoryLayouts;
+
+    /**
+     * The repository system.
+     */
+    @Component
+    private RepositorySystem repositorySystem;
+
+    /**
+     * Repositories in the format id::[layout]::url or just url, separated by comma. ie.
+     * central::default::https://repo.maven.apache.org/maven2,myrepo::::https://repo.acme.com,https://repo.acme2.com
+     */
+    @Parameter(property = "remoteRepositories")
+    private String remoteRepositories;
+
+    /**
+     *
+     */
+    @Parameter(defaultValue = "${project.remoteArtifactRepositories}", readonly = true, required = true)
+    private List<ArtifactRepository> pomRemoteRepositories;
+
+    /**
+     * Download transitively, retrieving the specified artifact and all of its dependencies.
+     */
+    @Parameter(property = "transitive", defaultValue = "true")
+    private boolean transitive = true;
+
+    /**
+     * Skip plugin execution completely.
+     *
+     * @since 2.7
+     */
+    @Parameter(property = "mdep.skip", defaultValue = "false")
+    private boolean skip;
 
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
     private MavenProject project;
@@ -239,7 +310,7 @@ public class PatchMojo extends AbstractMojo {
             }
 
             transformation.complete();
-        } catch (IOException e) {
+        } catch (IOException | MojoFailureException e) {
             throw new MojoExecutionException("Error occurred during execution", e);
         }
     }
@@ -342,7 +413,8 @@ public class PatchMojo extends AbstractMojo {
         return selected;
     }
 
-    private void compile(final List<File> jars) throws MojoExecutionException, CompilationFailureException {
+    private void compile(final List<File> jars) throws MojoExecutionException, MojoFailureException {
+        final List<File> files = resolve(dependencies);
 
         getLog().debug("Using compiler '" + compilerId + "'.");
 
@@ -417,9 +489,7 @@ public class PatchMojo extends AbstractMojo {
                 .map(File::getAbsolutePath)
                 .forEach(compilerConfiguration::addClasspathEntry);
 
-
-        dependencies.stream()
-                .map(Mvn::mvn)
+        files.stream()
                 .map(File::getAbsolutePath)
                 .forEach(compilerConfiguration::addClasspathEntry);
 
@@ -498,6 +568,23 @@ public class PatchMojo extends AbstractMojo {
                         break;
                 }
             }
+        }
+    }
+
+    private List<File> resolve(final List<String> dependencies) throws MojoFailureException, MojoExecutionException {
+        final List<File> resolvedDependencies = new ArrayList<File>();
+        for (final String dependency : dependencies) {
+            final File file = resolve(dependency);
+            resolvedDependencies.add(file);
+        }
+        return resolvedDependencies;
+    }
+
+    private File resolve(final String gav) throws MojoFailureException, MojoExecutionException {
+        try {
+            return Mvn.mvn(gav);
+        } catch (Exception e) {
+            return download(gav);
         }
     }
 
@@ -630,4 +717,135 @@ public class PatchMojo extends AbstractMojo {
             super(String.format("No artifacts matched expression '%s'", select));
         }
     }
+
+    public File download(final String gav) throws MojoExecutionException, MojoFailureException {
+
+        final DefaultDependableCoordinate coordinate = mvn(gav);
+
+        ArtifactRepositoryPolicy always =
+                new ArtifactRepositoryPolicy(true, ArtifactRepositoryPolicy.UPDATE_POLICY_ALWAYS,
+                        ArtifactRepositoryPolicy.CHECKSUM_POLICY_WARN);
+
+        List<ArtifactRepository> repoList = new ArrayList<>();
+
+        if (pomRemoteRepositories != null) {
+            repoList.addAll(pomRemoteRepositories);
+        }
+
+        if (remoteRepositories != null) {
+            // Use the same format as in the deploy plugin id::layout::url
+            String[] repos = StringUtils.split(remoteRepositories, ",");
+            for (String repo : repos) {
+                repoList.add(parseRepository(repo, always));
+            }
+        }
+
+        try {
+            ProjectBuildingRequest buildingRequest =
+                    new DefaultProjectBuildingRequest(session.getProjectBuildingRequest());
+
+            Settings settings = session.getSettings();
+            repositorySystem.injectMirror(repoList, settings.getMirrors());
+            repositorySystem.injectProxy(repoList, settings.getProxies());
+            repositorySystem.injectAuthentication(repoList, settings.getServers());
+
+            buildingRequest.setRemoteRepositories(repoList);
+
+            if (transitive) {
+                getLog().info("Resolving " + coordinate + " with transitive dependencies");
+                dependencyResolver.resolveDependencies(buildingRequest, coordinate, null);
+            } else {
+                getLog().info("Resolving " + coordinate);
+                artifactResolver.resolveArtifact(buildingRequest, toArtifactCoordinate(coordinate));
+            }
+        } catch (ArtifactResolverException | DependencyResolverException e) {
+            throw new MojoExecutionException("Couldn't download artifact: " + e.getMessage(), e);
+        }
+
+        return Mvn.mvn(gav);
+    }
+
+    private ArtifactCoordinate toArtifactCoordinate(DependableCoordinate dependableCoordinate) {
+        ArtifactHandler artifactHandler = artifactHandlerManager.getArtifactHandler(dependableCoordinate.getType());
+        DefaultArtifactCoordinate artifactCoordinate = new DefaultArtifactCoordinate();
+        artifactCoordinate.setGroupId(dependableCoordinate.getGroupId());
+        artifactCoordinate.setArtifactId(dependableCoordinate.getArtifactId());
+        artifactCoordinate.setVersion(dependableCoordinate.getVersion());
+        artifactCoordinate.setClassifier(dependableCoordinate.getClassifier());
+        artifactCoordinate.setExtension(artifactHandler.getExtension());
+        return artifactCoordinate;
+    }
+
+    ArtifactRepository parseRepository(String repo, ArtifactRepositoryPolicy policy)
+            throws MojoFailureException {
+        // if it's a simple url
+        String id = "temp";
+        ArtifactRepositoryLayout layout = getLayout("default");
+        String url = repo;
+
+        // if it's an extended repo URL of the form id::layout::url
+        if (repo.contains("::")) {
+            Matcher matcher = ALT_REPO_SYNTAX_PATTERN.matcher(repo);
+            if (!matcher.matches()) {
+                throw new MojoFailureException(repo, "Invalid syntax for repository: " + repo,
+                        "Invalid syntax for repository. Use \"id::layout::url\" or \"URL\".");
+            }
+
+            id = matcher.group(1).trim();
+            if (!StringUtils.isEmpty(matcher.group(2))) {
+                layout = getLayout(matcher.group(2).trim());
+            }
+            url = matcher.group(3).trim();
+        }
+        return new MavenArtifactRepository(id, url, layout, policy, policy);
+    }
+
+    private ArtifactRepositoryLayout getLayout(String id)
+            throws MojoFailureException {
+        ArtifactRepositoryLayout layout = repositoryLayouts.get(id);
+
+        if (layout == null) {
+            throw new MojoFailureException(id, "Invalid repository layout", "Invalid repository layout: " + id);
+        }
+
+        return layout;
+    }
+
+    public static DefaultDependableCoordinate mvn(final String coordinates) {
+        final String[] parts = coordinates.split(":");
+
+        // org.apache.tomee:apache-tomee:zip:plus:7.1.0
+        if (parts.length == 5) {
+            final String group = parts[0];
+            final String artifact = parts[1];
+            final String packaging = parts[2];
+            final String classifier = parts[3];
+            final String version = parts[4];
+            return mvn(group, artifact, version, packaging, classifier);
+        }
+
+        // org.apache.tomee:tomee-util:jar:7.1.0
+        if (parts.length == 4) {
+            final String group = parts[0];
+            final String artifact = parts[1];
+            final String packaging = parts[2];
+            final String version = parts[3];
+            return mvn(group, artifact, version, packaging, null);
+        }
+
+        throw new IllegalArgumentException("Unsupported coordinates (GAV): " + coordinates);
+    }
+
+    private static DefaultDependableCoordinate mvn(final String group, final String artifact,
+                                                   final String version, final String packaging,
+                                                   final String classifier) {
+        final DefaultDependableCoordinate coordinate = new DefaultDependableCoordinate();
+        coordinate.setArtifactId(artifact);
+        coordinate.setClassifier(classifier);
+        coordinate.setGroupId(group);
+        coordinate.setVersion(version);
+        coordinate.setType(packaging);
+        return coordinate;
+    }
+
 }
