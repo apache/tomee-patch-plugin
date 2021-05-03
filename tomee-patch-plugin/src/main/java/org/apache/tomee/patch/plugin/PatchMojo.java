@@ -507,7 +507,7 @@ public class PatchMojo extends AbstractMojo {
 
             final String path = file.getAbsolutePath().substring(root.getAbsolutePath().length() + 1);
 
-            for (final String exclude : dependencies) {
+            for (final String exclude : sourceExcludes) {
                 if (path.matches(exclude)) {
                     getLog().debug("Exclude source file: " + file.getAbsolutePath());
                     continue copy;
