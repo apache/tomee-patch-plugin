@@ -46,6 +46,7 @@ import org.tomitribe.jkta.util.Paths;
 import org.tomitribe.swizzle.stream.StreamBuilder;
 import org.tomitribe.util.Files;
 import org.tomitribe.util.IO;
+import org.tomitribe.util.Mvn;
 import org.tomitribe.util.Zips;
 
 import java.io.File;
@@ -82,6 +83,9 @@ public class PatchMojo extends AbstractMojo {
 
     @Parameter
     private List<String> sourceExcludes = new ArrayList<>();
+
+    @Parameter
+    private List<String> dependencies = new ArrayList<>();
 
     /**
      * Regex to identify which archives should be matched
@@ -413,6 +417,12 @@ public class PatchMojo extends AbstractMojo {
                 .map(File::getAbsolutePath)
                 .forEach(compilerConfiguration::addClasspathEntry);
 
+
+        dependencies.stream()
+                .map(Mvn::mvn)
+                .map(File::getAbsolutePath)
+                .forEach(compilerConfiguration::addClasspathEntry);
+
         // Now we can compile!
         final CompilerResult compilerResult;
         try {
@@ -497,7 +507,7 @@ public class PatchMojo extends AbstractMojo {
 
             final String path = file.getAbsolutePath().substring(root.getAbsolutePath().length() + 1);
 
-            for (final String exclude : sourceExcludes) {
+            for (final String exclude : dependencies) {
                 if (path.matches(exclude)) {
                     getLog().debug("Exclude source file: " + file.getAbsolutePath());
                     continue copy;
