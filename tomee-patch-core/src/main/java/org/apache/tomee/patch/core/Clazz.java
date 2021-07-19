@@ -27,9 +27,9 @@ public class Clazz {
     private int applied;
 
     public Clazz(final String name, final File file) {
-        this.name = name;
-        this.prefix = name.replaceAll("\\.class$", "");
-        this.packge = asPackage(name);
+        this.name = name.replace("\\", "/");
+        this.prefix = this.name.replaceAll("\\.class$", "");
+        this.packge = asPackage(this.name);
         this.file = file;
     }
 

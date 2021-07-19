@@ -540,8 +540,8 @@ public class Transformation {
 
         boolean patchedClass = false;
         for (final Clazz clazz : classes) {
-            if (path.replace('/', File.separatorChar).equals(clazz.getName()) ||
-                    path.replace('/', File.separatorChar).startsWith(clazz.getPrefix() + "$")) {
+            if (path.equals(clazz.getName()) ||
+                    path.startsWith(clazz.getPrefix() + "$")) {
 
                 jar.patch(clazz, classes);
                 patchedClass = true;
