@@ -25,7 +25,7 @@
   <parent>
     <groupId>org.apache.tomee.patch</groupId>
     <artifactId>tomee-patch-parent</artifactId>
-    <version>0.6</version>
+    <version>0.7-SNAPSHOT</version>
   </parent>
 
   <artifactId>tomee-patch-core</artifactId>
