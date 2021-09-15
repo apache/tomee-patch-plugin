@@ -250,7 +250,8 @@ public class Transformation {
     }
 
     private String updatePath(final String name) {
-        return name.replace("resources/javax.faces", "resources/jakarta.faces");
+        return name;
+        //return name.replace("resources/javax.faces", "resources/jakarta.faces");
     }
 
     private boolean copyUnmodified(final String path) {
