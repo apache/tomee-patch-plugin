@@ -139,7 +139,11 @@ public class Transformation {
                     if (path.endsWith(".class")) {
                         scanClass(zipInputStream, zipOutputStream);
                     } else if (isZip(path)) {
-                        scanJar(path, zipInputStream, zipOutputStream);
+                        if(isExcludedJar(path)){
+                            IO.copy(zipInputStream, zipOutputStream);
+                        }else{
+                            scanJar(path, zipInputStream, zipOutputStream);
+                        }
                     } else if (copyUnmodified(path)) {
                         IO.copy(zipInputStream, zipOutputStream);
                     } else {
@@ -260,6 +264,11 @@ public class Transformation {
         if (path.endsWith("changelog.html")) return true;
         if (path.endsWith("RELEASE-NOTES.txt")) return true;
         if (path.endsWith("pom.xml")) return true;
+        return false;
+    }
+
+    private boolean isExcludedJar(final String path) {
+        if (path.matches(".*bcprov-jdk15on-.*.jar")) return true;
         return false;
     }
 
