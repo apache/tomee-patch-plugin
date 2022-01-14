@@ -1,5 +1,6 @@
 package org.apache.tomee.patch.core;
 
+import org.junit.Before;
 import org.junit.Test;
 import org.tomitribe.util.Archive;
 
@@ -7,9 +8,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.List;
+import java.util.*;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
@@ -20,6 +19,13 @@ import static org.junit.Assert.assertTrue;
 
 public class ExcludeJarsTest {
     public static final int DEFAULT_BUFFER_SIZE = 8192;
+    public Skips customSkips = new Skips();
+
+    @Before
+    public void prepareLists(){
+        customSkips.getJars().put("eclipselink-3.0.0.jar","org.eclipse.persistence:eclipselink:jar:3.0.0");
+        customSkips.getJars().put("bcprov-jdk15on-1.69.jar","org.bouncycastle:bcprov-jdk15on:jar:1.69");
+    }
 
     @Test
     public void transformWithJarExclusions() throws Exception {
@@ -34,7 +40,8 @@ public class ExcludeJarsTest {
                 .add("README.txt", "hi")
                 .add(jarName, testJar).toJar();
 
-        File transformedJar = Transformation.transform(zipFile);
+        Transformation transformation = new Transformation(new ArrayList<Clazz>(), new File("does not exist"),null, customSkips, null, new NullLog(), false);
+        File transformedJar = transformation.transformArchive(zipFile);
         assertTrue(obtainJarContent(transformedJar).contains(jarSignatureFileName));
     }
 
@@ -52,7 +59,8 @@ public class ExcludeJarsTest {
                 .add("README.txt", "hi")
                 .add(jarName, testJar).toJar();
 
-        File transformedJar = Transformation.transform(zipFile);
+        Transformation transformation = new Transformation(new ArrayList<Clazz>(), new File("does not exist"),null, customSkips, null, new NullLog(), false);
+        File transformedJar = transformation.transformArchive(zipFile);
         assertFalse(obtainJarContent(transformedJar).contains(jarSignatureFileName));
     }
 

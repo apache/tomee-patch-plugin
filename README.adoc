@@ -98,7 +98,7 @@ If the sources have dependencies on jars not found in the zip itself, those can 
 
 Note that transitive dependecies are not supported, so each jar directly needed to compile must be specified individually.
 
-## Repacing Jar files in the Archive
+## Replacing Jar files in the Archive
 
 The `<replace><jars>` list allows us to tell the plugin, "when you see a `jakarta.faces-3.0.0.jar` in the war file, replace it with the `org.glassfish:jakarta.faces:jar:3.0.0` artifact from our local maven repo."
 
@@ -122,3 +122,16 @@ WARNING: At the moment this will maintain the original file name as found in the
 
 The `<replace><jars>` list allows us to tell the plugin, "when you see an `openejb-version.properties` file anywhere in the war file or its libraries, replace it with the specially modified version from `target/classes/`."  In the module we're generating a new `openejb-version.properties` so we can change the version TomEE reports from "8.0.7-SNAPSHOT" to "9.0.0-M7-SNAPSHOT"
 
+## Skipping Jar files from the Archives
+This is useful when you have jars found in the archive need to preserve jar signature metadata.
+The `<skips><jars>` list allows you to tell the plugin which Jars should be skipped during archive transformation.
+Example configuration:
+
+        <configuration>
+           <skips>
+               <jars>
+                 <eclipselink-3.0.0.jar>org.eclipse.persistence:eclipselink:jar:3.0.0</eclipselink-3.0.0.jar>
+                 <bcprov-jdk15on-1.69.jar>org.bouncycastle:bcprov-jdk15on:jar:1.69</bcprov-jdk15on-1.69.jar>
+               </jars>
+             </skips>
+        </configuration>

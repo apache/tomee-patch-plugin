@@ -28,11 +28,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -46,6 +42,7 @@ public class Transformation {
     private final List<Clazz> classes = new ArrayList<Clazz>();
     private final Log log;
     private final Replacements replacements;
+    private final Skips skips;
     private final Additions additions;
     private final Boolean skipTransform;
     private final File patchResources;
@@ -53,16 +50,18 @@ public class Transformation {
     public Transformation() {
         this.log = new NullLog();
         this.replacements = new Replacements();
+        this.skips = new Skips();
         this.additions = new Additions();
         this.skipTransform = false;
         this.patchResources = new File("does not exist");
     }
 
 
-    public Transformation(final List<Clazz> classes, final File patchResources, final Replacements replacements, final Additions additions, final Log log, final Boolean skipTransform) {
+    public Transformation(final List<Clazz> classes, final File patchResources, final Replacements replacements, final Skips skips, final Additions additions, final Log log, final Boolean skipTransform) {
         this.classes.addAll(classes);
         this.log = log;
         this.replacements = replacements == null ? new Replacements() : replacements;
+        this.skips = skips == null ? new Skips() : skips;
         this.additions = additions == null ? new Additions() : additions;
         this.patchResources = patchResources;
         this.skipTransform = skipTransform;
@@ -268,7 +267,16 @@ public class Transformation {
     }
 
     private boolean isExcludedJar(final String path) {
-        if (path.matches(".*bcprov-jdk15on-.*.jar")) return true;
+        if (skips != null) {
+            Map<String, String> skipsJars = skips.getJars();
+            if (!skipsJars.isEmpty()) {
+                for (Map.Entry<String, String> set : skipsJars.entrySet()) {
+                    if (path.contains(set.getKey())) {
+                        return true;
+                    }
+                }
+            }
+        }
         return false;
     }
 
