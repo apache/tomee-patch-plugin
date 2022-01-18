@@ -24,11 +24,19 @@ import org.tomitribe.util.IO;
 import org.tomitribe.util.Mvn;
 import org.tomitribe.util.dir.Dir;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.jar.Attributes;
+import java.util.jar.Manifest;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -46,6 +54,7 @@ public class Transformation {
     private final Additions additions;
     private final Boolean skipTransform;
     private final File patchResources;
+    private final Boolean skipSigned;
 
     public Transformation() {
         this.log = new NullLog();
@@ -53,11 +62,15 @@ public class Transformation {
         this.skips = new Skips();
         this.additions = new Additions();
         this.skipTransform = false;
+        this.skipSigned = false;
         this.patchResources = new File("does not exist");
     }
 
 
-    public Transformation(final List<Clazz> classes, final File patchResources, final Replacements replacements, final Skips skips, final Additions additions, final Log log, final Boolean skipTransform) {
+    public Transformation(final List<Clazz> classes, final File patchResources, final Replacements replacements,
+                          final Skips skips, final Additions additions, final Log log, final Boolean skipTransform,
+                          final Boolean skipSigned) {
+
         this.classes.addAll(classes);
         this.log = log;
         this.replacements = replacements == null ? new Replacements() : replacements;
@@ -65,6 +78,7 @@ public class Transformation {
         this.additions = additions == null ? new Additions() : additions;
         this.patchResources = patchResources;
         this.skipTransform = skipTransform;
+        this.skipSigned = skipSigned;
     }
 
     public static File transform(final File jar) throws IOException {
@@ -84,6 +98,7 @@ public class Transformation {
     }
 
     private void scanJar(final String name, final InputStream inputStream, final OutputStream outputStream) throws IOException {
+
         {
             final String jar = new File(name).getName();
             final String replacement = replacements.getJars().get(jar);
@@ -112,7 +127,8 @@ public class Transformation {
                 // TODO: the name may be changed in transformation
                 final String path = updatePath(oldEntry.getName());
 
-                if (skip(path)) {
+                // skip all signature files .RSA, .DSA, .SF
+                if (!skipSigned && isSigned(path)) {
                     IO.copy(zipInputStream, skipped);
                     continue;
                 }
@@ -138,9 +154,9 @@ public class Transformation {
                     if (path.endsWith(".class")) {
                         scanClass(zipInputStream, zipOutputStream);
                     } else if (isZip(path)) {
-                        if(isExcludedJar(path)){
+                        if(isExcludedJar(path)) {
                             IO.copy(zipInputStream, zipOutputStream);
-                        }else{
+                        } else {
                             scanJar(path, zipInputStream, zipOutputStream);
                         }
                     } else if (copyUnmodified(path)) {
@@ -243,7 +259,7 @@ public class Transformation {
      * Skip signed jar public key files.  We most definitely
      * have tampered with the jar.
      */
-    private boolean skip(final String name) {
+    private boolean isSigned(final String name) {
         if (name.startsWith("META-INF/")) {
             if (name.endsWith(".SF")) return true;
             if (name.endsWith(".DSA")) return true;
@@ -428,6 +444,30 @@ public class Transformation {
                 .replace("javax.enterprise.deploy-api", "jakarta.enterprise.deploy-api")
 
                 .get();
+
+        // we remove signatures (.DSA, .RSA, .SF) but we also need to remove all digest entries
+        if (!skipSigned && path.endsWith("MANIFEST.MF")) {
+            final Manifest manifest = new Manifest(inputStream);
+            final Manifest transformedManifest = new Manifest();
+            transformedManifest.getMainAttributes().putAll(manifest.getMainAttributes());
+
+            for (final Map.Entry<String, Attributes> e : manifest.getEntries().entrySet()) {
+                final Attributes attributes = e.getValue();
+                final Attributes transformedAttributes = new Attributes();
+                for (final Map.Entry<Object, Object> entry : attributes.entrySet()) {
+                    if (!String.valueOf(entry.getKey()).contains("-Digest")) {
+                        transformedAttributes.put(entry.getKey(), entry.getValue());
+                    }
+                }
+                if (!transformedAttributes.isEmpty()) {
+                    transformedManifest.getEntries().put(e.getKey(), transformedAttributes);
+                }
+            }
+
+            final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            transformedManifest.write(baos);
+            inputStream = IO.read(baos.toByteArray());
+        }
 
         IO.copy(inputStream, outputStream);
     }
