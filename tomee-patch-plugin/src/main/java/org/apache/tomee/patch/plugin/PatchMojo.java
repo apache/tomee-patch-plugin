@@ -189,6 +189,9 @@ public class PatchMojo extends AbstractMojo {
     @Parameter(defaultValue = "false")
     private Boolean transformSources;
 
+    @Parameter(defaultValue = "false")
+    private Boolean attach;
+
     /**
      * Sets the executable of the compiler to use when fork is <code>true</code>.
      */
@@ -299,11 +302,13 @@ public class PatchMojo extends AbstractMojo {
                         continue;
                     }
 
-                    final String classifier = artifact.getClassifier();
-                    final AttachedArtifact attachedArtifact = new AttachedArtifact(project.getArtifact(), "tar.gz", classifier, project.getArtifact().getArtifactHandler());
-                    attachedArtifact.setFile(tarGz);
-                    attachedArtifact.setResolved(true);
-                    project.addAttachedArtifact(attachedArtifact);
+                    if(attach) {
+                        final String classifier = artifact.getClassifier();
+                        final AttachedArtifact attachedArtifact = new AttachedArtifact(project.getArtifact(), "tar.gz", classifier, project.getArtifact().getArtifactHandler());
+                        attachedArtifact.setFile(tarGz);
+                        attachedArtifact.setResolved(true);
+                        project.addAttachedArtifact(attachedArtifact);
+                    }
                 }
             }
 
