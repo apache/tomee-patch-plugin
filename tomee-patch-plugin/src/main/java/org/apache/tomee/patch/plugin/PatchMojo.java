@@ -189,17 +189,20 @@ public class PatchMojo extends AbstractMojo {
     @Parameter(defaultValue = "false")
     private Boolean transformSources;
 
+    /**
+     * Attach created *.tar.gz files as artifacts. Only works if {@code createTarGz} is set to {@code true}.
+     */
     @Parameter(defaultValue = "false")
     private Boolean attach;
 
     /**
-     * Sets the executable of the compiler to use when fork is <code>true</code>.
+     * Sets the executable of the compiler to use when fork is {@code true}.
      */
     @Parameter(property = "maven.compiler.executable")
     private String executable;
 
     /**
-     * Version of the compiler to use, ex. "1.3", "1.5", if fork is set to <code>true</code>.
+     * Version of the compiler to use, ex. "1.3", "1.5", if fork is set to {@code true}.
      */
     @Parameter(property = "maven.compiler.compilerVersion")
     private String compilerVersion;
@@ -217,7 +220,7 @@ public class PatchMojo extends AbstractMojo {
     private File buildDirectory;
 
     /**
-     * The directory where we will extract the zips being patched so we can compile the
+     * The directory where we will extract the zips being patched, so we can compile the
      * patch source against the jars contained within.
      */
     @Parameter(defaultValue = "${project.build.directory}/patch-classpath", required = true)
