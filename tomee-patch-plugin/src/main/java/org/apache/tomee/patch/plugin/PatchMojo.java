@@ -187,6 +187,9 @@ public class PatchMojo extends AbstractMojo {
     private Boolean skipTransform;
 
     @Parameter(defaultValue = "false")
+    private Boolean skipSigned;
+
+    @Parameter(defaultValue = "false")
     private Boolean transformSources;
 
     /**
@@ -289,7 +292,7 @@ public class PatchMojo extends AbstractMojo {
 
             final List<Clazz> clazzes = classes();
 
-            final Transformation transformation = new Transformation(clazzes, patchResourceDirectory, replace, skips, add, new MavenLog(getLog()), skipTransform);
+            final Transformation transformation = new Transformation(clazzes, patchResourceDirectory, replace, skips, add, new MavenLog(getLog()), skipTransform, skipSigned);
             for (final Artifact artifact : artifacts) {
                 final File file = artifact.getFile();
                 getLog().debug("Patching " + file.getAbsolutePath());
