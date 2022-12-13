@@ -27,11 +27,7 @@ import org.apache.maven.execution.MavenSession;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
-import org.apache.maven.plugins.annotations.Component;
-import org.apache.maven.plugins.annotations.LifecyclePhase;
-import org.apache.maven.plugins.annotations.Mojo;
-import org.apache.maven.plugins.annotations.Parameter;
-import org.apache.maven.plugins.annotations.ResolutionScope;
+import org.apache.maven.plugins.annotations.*;
 import org.apache.maven.project.DefaultProjectBuildingRequest;
 import org.apache.maven.project.MavenProject;
 import org.apache.maven.project.ProjectBuildingRequest;
@@ -59,10 +55,7 @@ import org.codehaus.plexus.util.StringUtils;
 import org.tomitribe.jkta.usage.Dir;
 import org.tomitribe.jkta.util.Paths;
 import org.tomitribe.swizzle.stream.StreamBuilder;
-import org.tomitribe.util.Files;
-import org.tomitribe.util.IO;
-import org.tomitribe.util.Mvn;
-import org.tomitribe.util.Zips;
+import org.tomitribe.util.*;
 
 import java.io.File;
 import java.io.IOException;
@@ -70,17 +63,15 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Mojo(name = "run", requiresDependencyResolution = ResolutionScope.RUNTIME_PLUS_SYSTEM, defaultPhase = LifecyclePhase.PACKAGE, requiresProject = true, threadSafe = true)
 public class PatchMojo extends AbstractMojo {
@@ -232,6 +223,9 @@ public class PatchMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.build.directory}/patch-resources", required = true)
     private File patchResourceDirectory;
 
+    @Parameter(defaultValue = "${project.build.directory}/patch-sourcejars", required = true, readonly = true)
+    private File patchSourceJarsDirectory;
+
     /**
      * The -encoding argument for the Java compiler.
      *
@@ -305,7 +299,7 @@ public class PatchMojo extends AbstractMojo {
                         continue;
                     }
 
-                    if(attach) {
+                    if (attach) {
                         final String classifier = artifact.getClassifier();
                         final AttachedArtifact attachedArtifact = new AttachedArtifact(project.getArtifact(), "tar.gz", classifier, project.getArtifact().getArtifactHandler());
                         attachedArtifact.setFile(tarGz);
@@ -315,9 +309,49 @@ public class PatchMojo extends AbstractMojo {
                 }
             }
 
+            updateSourceJar();
+
             transformation.complete();
         } catch (IOException | MojoFailureException e) {
             throw new MojoExecutionException("Error occurred during execution", e);
+        }
+    }
+
+    private void updateSourceJar() throws IOException {
+        final List<Artifact> attachedArtifacts = this.project.getAttachedArtifacts();
+        final List<File> sourceJars = attachedArtifacts.stream()
+                .filter(Artifact::hasClassifier)
+                .filter(artifact -> "sources".equals(artifact.getClassifier()))
+                .filter(artifact -> "java-source".equals(artifact.getType()))
+                .map(Artifact::getFile)
+                .collect(Collectors.toList());
+
+        Files.mkdir(patchSourceJarsDirectory);
+
+        for (final File sourceJar : sourceJars) {
+            final File extractedZip = new File(patchClasspathDirectory, sourceJar.getName() + ".extracted");
+            Files.mkdir(extractedZip);
+            Zips.unzip(sourceJar, extractedZip);
+
+            copySource(patchSourceDirectory, extractedZip);
+
+            getLog().info("Patching " + sourceJar.getName());
+
+            final File patchedSourceJar = new File(patchClasspathDirectory, sourceJar.getName() + ".patched");
+
+            try (final ZipOutputStream zipOutputStream = new ZipOutputStream(IO.write(patchedSourceJar))) {
+                final List<File> files = Dir.from(extractedZip).files().collect(Collectors.toList());
+
+                final int beginIndex = extractedZip.getAbsolutePath().length() + 1;
+
+                for (File file : files) {
+                    final String relativeFileName = file.getAbsolutePath().substring(beginIndex);
+                    zipOutputStream.putNextEntry(new ZipEntry(relativeFileName));
+                    zipOutputStream.write(IO.readBytes(file));
+                }
+            }
+
+            IO.copy(patchedSourceJar, sourceJar);
         }
     }
 
@@ -625,6 +659,25 @@ public class PatchMojo extends AbstractMojo {
         }
     }
 
+    private void copySource(final File src, final File dest) {
+        for (final File file : src.listFiles()) {
+
+            if (file.isDirectory()) {
+
+                final File dir = new File(dest, file.getName());
+                Files.mkdir(dir);
+                copySource(file, dir);
+
+            } else if (file.isFile()) {
+                try (InputStream in = IO.read(file)) {
+                    IO.copy(in, new File(dest, file.getName()));
+                } catch (IOException e) {
+                    throw new UncheckedIOException("Cannot copy file " + file.getAbsolutePath(), e);
+                }
+            }
+        }
+    }
+
     private InputStream updateImports(final InputStream in) {
         return StreamBuilder.create(in)
                 .replace("javax.activation", "jakarta.activation")
@@ -685,7 +738,7 @@ public class PatchMojo extends AbstractMojo {
                     tc = tcs.get(0);
                 }
             } catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException
-                    | InvocationTargetException e) {
+                     | InvocationTargetException e) {
                 // ignore
             }
         }
