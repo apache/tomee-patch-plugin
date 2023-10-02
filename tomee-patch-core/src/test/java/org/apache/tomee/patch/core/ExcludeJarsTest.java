@@ -8,7 +8,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
@@ -22,9 +24,9 @@ public class ExcludeJarsTest {
     public Skips customSkips = new Skips();
 
     @Before
-    public void prepareLists(){
-        customSkips.getJars().put("eclipselink-3.0.0.jar","org.eclipse.persistence:eclipselink:jar:3.0.0");
-        customSkips.getJars().put("bcprov-jdk15on-1.69.jar","org.bouncycastle:bcprov-jdk15on:jar:1.69");
+    public void prepareLists() {
+        customSkips.getJars().put("eclipselink-3.0.0.jar", "org.eclipse.persistence:eclipselink:jar:3.0.0");
+        customSkips.getJars().put("bcprov-jdk15on-1.69.jar", "org.bouncycastle:bcprov-jdk15on:jar:1.69");
     }
 
     @Test
@@ -40,8 +42,8 @@ public class ExcludeJarsTest {
                 .add("README.txt", "hi")
                 .add(jarName, testJar).toJar();
 
-        Transformation transformation = new Transformation(new ArrayList<Clazz>(), new File("does not exist"),null, customSkips, null, new NullLog(), false);
-        File transformedJar = transformation.transformArchive(zipFile);
+        final Transformation transformation = new Transformation(new ArrayList<Clazz>(), new File("does not exist"), null, customSkips, null, new NullLog(), false);
+        final File transformedJar = transformation.transformArchive(zipFile);
         assertTrue(obtainJarContent(transformedJar).contains(jarSignatureFileName));
     }
 
@@ -59,31 +61,31 @@ public class ExcludeJarsTest {
                 .add("README.txt", "hi")
                 .add(jarName, testJar).toJar();
 
-        Transformation transformation = new Transformation(new ArrayList<Clazz>(), new File("does not exist"),null, customSkips, null, new NullLog(), false);
-        File transformedJar = transformation.transformArchive(zipFile);
+        final Transformation transformation = new Transformation(new ArrayList<Clazz>(), new File("does not exist"), null, customSkips, null, new NullLog(), false);
+        final File transformedJar = transformation.transformArchive(zipFile);
         assertFalse(obtainJarContent(transformedJar).contains(jarSignatureFileName));
     }
 
     private List obtainJarContent(File transformedJar) throws IOException {
-        List<String> jarFileList = new ArrayList<String>();
+        final List<String> jarFileList = new ArrayList<String>();
 
         //Iterating over the zip files
-        ZipFile zip = new ZipFile(transformedJar);
-        Enumeration content = zip.entries();
+        final ZipFile zip = new ZipFile(transformedJar);
+        final Enumeration content = zip.entries();
         for (Enumeration f = content; f.hasMoreElements(); ) {
-            ZipEntry entry = (ZipEntry) f.nextElement();
+            final ZipEntry entry = (ZipEntry) f.nextElement();
             //System.out.println(entry.getName());
 
             if (entry.getName().endsWith(".jar")) {
 
                 //Iterating over the jar foun in the zip file
-                File jar = new File(entry.getName());
-                copyInputStreamToFile(zip.getInputStream(entry),jar);
-                JarFile jarFile = new JarFile(jar);
-                Enumeration innerEntries = jarFile.entries();
+                final File jar = new File(entry.getName());
+                copyInputStreamToFile(zip.getInputStream(entry), jar);
+                final JarFile jarFile = new JarFile(jar);
+                final Enumeration innerEntries = jarFile.entries();
                 for (Enumeration e = innerEntries; e.hasMoreElements(); ) {
-                    JarEntry file = (JarEntry) e.nextElement();
-               //System.out.println("  - " +file.getName());
+                    final JarEntry file = (JarEntry) e.nextElement();
+                    //System.out.println("  - " +file.getName());
                     jarFileList.add(file.getName());
                 }
                 jarFile.close();

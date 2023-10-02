@@ -28,7 +28,12 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -138,9 +143,9 @@ public class Transformation {
                     if (path.endsWith(".class")) {
                         scanClass(zipInputStream, zipOutputStream);
                     } else if (isZip(path)) {
-                        if(isExcludedJar(path)){
+                        if (isExcludedJar(path)) {
                             IO.copy(zipInputStream, zipOutputStream);
-                        }else{
+                        } else {
                             scanJar(path, zipInputStream, zipOutputStream);
                         }
                     } else if (copyUnmodified(path)) {

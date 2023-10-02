@@ -48,7 +48,13 @@ import org.apache.maven.shared.transfer.dependencies.resolve.DependencyResolver;
 import org.apache.maven.shared.transfer.dependencies.resolve.DependencyResolverException;
 import org.apache.maven.toolchain.Toolchain;
 import org.apache.maven.toolchain.ToolchainManager;
-import org.apache.tomee.patch.core.*;
+import org.apache.tomee.patch.core.Additions;
+import org.apache.tomee.patch.core.Clazz;
+import org.apache.tomee.patch.core.Is;
+import org.apache.tomee.patch.core.Replacements;
+import org.apache.tomee.patch.core.Skips;
+import org.apache.tomee.patch.core.Transformation;
+import org.apache.tomee.patch.core.ZipToTar;
 import org.codehaus.plexus.compiler.Compiler;
 import org.codehaus.plexus.compiler.CompilerConfiguration;
 import org.codehaus.plexus.compiler.CompilerMessage;
@@ -81,6 +87,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Mojo(name = "run", requiresDependencyResolution = ResolutionScope.RUNTIME_PLUS_SYSTEM, defaultPhase = LifecyclePhase.PACKAGE, requiresProject = true, threadSafe = true)
 public class PatchMojo extends AbstractMojo {
@@ -232,6 +240,9 @@ public class PatchMojo extends AbstractMojo {
     @Parameter(defaultValue = "${project.build.directory}/patch-resources", required = true)
     private File patchResourceDirectory;
 
+    @Parameter(defaultValue = "${project.build.directory}/patch-sourcejars", required = true, readonly = true)
+    private File patchSourceJarsDirectory;
+
     /**
      * The -encoding argument for the Java compiler.
      *
@@ -305,7 +316,7 @@ public class PatchMojo extends AbstractMojo {
                         continue;
                     }
 
-                    if(attach) {
+                    if (attach) {
                         final String classifier = artifact.getClassifier();
                         final AttachedArtifact attachedArtifact = new AttachedArtifact(project.getArtifact(), "tar.gz", classifier, project.getArtifact().getArtifactHandler());
                         attachedArtifact.setFile(tarGz);
@@ -315,9 +326,49 @@ public class PatchMojo extends AbstractMojo {
                 }
             }
 
+            updateSourceJar();
+
             transformation.complete();
         } catch (IOException | MojoFailureException e) {
             throw new MojoExecutionException("Error occurred during execution", e);
+        }
+    }
+
+    private void updateSourceJar() throws IOException {
+        final List<Artifact> attachedArtifacts = this.project.getAttachedArtifacts();
+        final List<File> sourceJars = attachedArtifacts.stream()
+                .filter(Artifact::hasClassifier)
+                .filter(artifact -> "sources".equals(artifact.getClassifier()))
+                .filter(artifact -> "java-source".equals(artifact.getType()))
+                .map(Artifact::getFile)
+                .collect(Collectors.toList());
+
+        Files.mkdir(patchSourceJarsDirectory);
+
+        for (final File sourceJar : sourceJars) {
+            final File extractedZip = new File(patchClasspathDirectory, sourceJar.getName() + ".extracted");
+            Files.mkdir(extractedZip);
+            Zips.unzip(sourceJar, extractedZip);
+
+            copySource(patchSourceDirectory, extractedZip);
+
+            getLog().info("Patching " + sourceJar.getName());
+
+            final File patchedSourceJar = new File(patchClasspathDirectory, sourceJar.getName() + ".patched");
+
+            try (final ZipOutputStream zipOutputStream = new ZipOutputStream(IO.write(patchedSourceJar))) {
+                final List<File> files = Dir.from(extractedZip).files().collect(Collectors.toList());
+
+                final int beginIndex = extractedZip.getAbsolutePath().length() + 1;
+
+                for (File file : files) {
+                    final String relativeFileName = file.getAbsolutePath().substring(beginIndex);
+                    zipOutputStream.putNextEntry(new ZipEntry(relativeFileName));
+                    zipOutputStream.write(IO.readBytes(file));
+                }
+            }
+
+            IO.copy(patchedSourceJar, sourceJar);
         }
     }
 
@@ -625,6 +676,25 @@ public class PatchMojo extends AbstractMojo {
         }
     }
 
+    private void copySource(final File src, final File dest) {
+        for (final File file : src.listFiles()) {
+
+            if (file.isDirectory()) {
+
+                final File dir = new File(dest, file.getName());
+                Files.mkdir(dir);
+                copySource(file, dir);
+
+            } else if (file.isFile()) {
+                try (InputStream in = IO.read(file)) {
+                    IO.copy(in, new File(dest, file.getName()));
+                } catch (IOException e) {
+                    throw new UncheckedIOException("Cannot copy file " + file.getAbsolutePath(), e);
+                }
+            }
+        }
+    }
+
     private InputStream updateImports(final InputStream in) {
         return StreamBuilder.create(in)
                 .replace("javax.activation", "jakarta.activation")
@@ -685,7 +755,7 @@ public class PatchMojo extends AbstractMojo {
                     tc = tcs.get(0);
                 }
             } catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException
-                    | InvocationTargetException e) {
+                     | InvocationTargetException e) {
                 // ignore
             }
         }
