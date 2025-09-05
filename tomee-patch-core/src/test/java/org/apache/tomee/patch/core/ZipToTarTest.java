@@ -65,11 +65,12 @@ public class ZipToTarTest {
 
         String lineSeperator = System.getProperty("line.separator");
         assertEquals("" +
-                "14 33188 index.txt" + lineSeperator +
                 "6 33188 color/red/crimson.txt" + lineSeperator +
-                "6 493 color/blue/navy.sh" + lineSeperator +
                 "6 33188 color/red/ruby.txt" + lineSeperator +
-                "6 33188 color/green/forest.txt" + lineSeperator, out.toString());
+                "6 493 color/blue/navy.sh" + lineSeperator +
+                "6 33188 color/green/forest.txt" + lineSeperator +
+                "14 33188 index.txt" + lineSeperator
+            , out.toString());
     }
 
 }
