@@ -25,6 +25,7 @@ import org.tomitribe.util.PrintString;
 
 import java.io.File;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.zip.GZIPInputStream;
 
 import static org.junit.Assert.assertEquals;
@@ -42,7 +43,12 @@ public class ZipToTarTest {
                 .toJar();
 
 
-        final File tarGz = ZipToTar.toTarGz(zip);
+        final File tarGz = ZipToTar.toTarGz(zip, new ArrayList<>(), new NullLog() {
+            @Override
+            public void info(final CharSequence message) {
+                System.out.println(message);
+            }
+        });
 
         final PrintString out = new PrintString();
         {

@@ -30,7 +30,7 @@ public class ClassTransformer extends ClassVisitor {
     private String className;
 
     public ClassTransformer(final ClassWriter classVisitor) {
-        super(Opcodes.ASM8, classVisitor);
+        super(Opcodes.ASM9, classVisitor);
     }
 
     @Override

@@ -50,6 +50,7 @@ import org.apache.maven.toolchain.Toolchain;
 import org.apache.maven.toolchain.ToolchainManager;
 import org.apache.tomee.patch.core.Additions;
 import org.apache.tomee.patch.core.Clazz;
+import org.apache.tomee.patch.core.FileMode;
 import org.apache.tomee.patch.core.Is;
 import org.apache.tomee.patch.core.Replacements;
 import org.apache.tomee.patch.core.Skips;
@@ -186,6 +187,9 @@ public class PatchMojo extends AbstractMojo {
     private Skips skips;
 
     @Parameter
+    private List<FileMode> fileModes;
+
+    @Parameter
     private Additions add;
 
     @Parameter(defaultValue = "false")
@@ -273,6 +277,12 @@ public class PatchMojo extends AbstractMojo {
     protected String target;
 
     /**
+     * <p>The -release argument for the Java compiler.</p>
+     */
+    @Parameter(property = "maven.compiler.release")
+    protected String release;
+
+    /**
      * The compiler id of the compiler to use. See this
      * <a href="non-javac-compilers.html">guide</a> for more information.
      */
@@ -300,7 +310,8 @@ public class PatchMojo extends AbstractMojo {
 
             final List<Clazz> clazzes = classes();
 
-            final Transformation transformation = new Transformation(clazzes, patchResourceDirectory, replace, skips, add, new MavenLog(getLog()), skipTransform);
+            final Transformation transformation = new Transformation(clazzes, patchResourceDirectory, replace, skips,
+                                                                     fileModes, add, new MavenLog(getLog()), skipTransform);
             for (final Artifact artifact : artifacts) {
                 final File file = artifact.getFile();
                 getLog().debug("Patching " + file.getAbsolutePath());
@@ -310,7 +321,7 @@ public class PatchMojo extends AbstractMojo {
                 if (createTarGz && file.getName().endsWith(".zip")) {
                     final File tarGz;
                     try {
-                        tarGz = ZipToTar.toTarGz(file);
+                        tarGz = ZipToTar.toTarGz(file, fileModes, new MavenLog(getLog()));
                     } catch (Exception e) {
                         getLog().error("Failed to create tar.gz from " + file.getAbsolutePath(), e);
                         continue;
@@ -527,9 +538,9 @@ public class PatchMojo extends AbstractMojo {
         compilerConfiguration.setShowWarnings(false);
         compilerConfiguration.setFailOnWarning(false);
         compilerConfiguration.setShowDeprecation(false);
+        compilerConfiguration.setReleaseVersion(release);
         compilerConfiguration.setSourceVersion(source);
         compilerConfiguration.setTargetVersion(target);
-        compilerConfiguration.setReleaseVersion(null);
         compilerConfiguration.setProc(null);
         compilerConfiguration.setSourceLocations(Collections.singletonList(patchSourceDirectory.getAbsolutePath()));
         compilerConfiguration.setAnnotationProcessors(null);

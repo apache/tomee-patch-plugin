@@ -16,6 +16,10 @@
  */
 package org.apache.tomee.patch.core;
 
+import org.apache.commons.compress.archivers.zip.UnixStat;
+import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream;
+import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
@@ -24,6 +28,8 @@ import org.tomitribe.util.IO;
 import org.tomitribe.util.Mvn;
 import org.tomitribe.util.dir.Dir;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,9 +42,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
 
 import static org.tomitribe.jkta.util.Predicates.not;
 
@@ -48,6 +51,7 @@ public class Transformation {
     private final Log log;
     private final Replacements replacements;
     private final Skips skips;
+    private final List<FileMode.ModeOverride> modeOverrides;
     private final Additions additions;
     private final Boolean skipTransform;
     private final File patchResources;
@@ -59,10 +63,12 @@ public class Transformation {
         this.additions = new Additions();
         this.skipTransform = false;
         this.patchResources = new File("does not exist");
+        this.modeOverrides = new ArrayList<>();
     }
 
 
-    public Transformation(final List<Clazz> classes, final File patchResources, final Replacements replacements, final Skips skips, final Additions additions, final Log log, final Boolean skipTransform) {
+    public Transformation(final List<Clazz> classes, final File patchResources, final Replacements replacements, final Skips skips,
+                          final List<FileMode> fileModes, final Additions additions, final Log log, final Boolean skipTransform) {
         this.classes.addAll(classes);
         this.log = log;
         this.replacements = replacements == null ? new Replacements() : replacements;
@@ -70,6 +76,7 @@ public class Transformation {
         this.additions = additions == null ? new Additions() : additions;
         this.patchResources = patchResources;
         this.skipTransform = skipTransform;
+        this.modeOverrides = FileMode.compileModeOverrides(fileModes);
     }
 
     public static File transform(final File jar) throws IOException {
@@ -108,17 +115,16 @@ public class Transformation {
 
         final Jar oldJar = Jar.enter(name);
         final Jar jar = Jar.current();
-        try {
-            final ZipInputStream zipInputStream = new ZipInputStream(inputStream);
-            final ZipOutputStream zipOutputStream = new ZipOutputStream(outputStream);
+        try (ZipArchiveInputStream zin = new ZipArchiveInputStream(inputStream);
+             ZipArchiveOutputStream zout = new ZipArchiveOutputStream(outputStream)) {
 
-            ZipEntry oldEntry;
-            while ((oldEntry = zipInputStream.getNextEntry()) != null) {
+            ZipArchiveEntry oldEntry;
+            while ((oldEntry = zin.getNextEntry()) != null) {
                 // TODO: the name may be changed in transformation
                 final String path = updatePath(oldEntry.getName());
 
                 if (skip(path)) {
-                    IO.copy(zipInputStream, skipped);
+                    IO.copy(zin, skipped);
                     continue;
                 }
 
@@ -128,33 +134,82 @@ public class Transformation {
                  */
                 if (isPatched(path, jar)) {
                     log.debug("Skipping class " + path);
-                    IO.copy(zipInputStream, skipped);
+                    IO.copy(zin, skipped);
+                    continue;
+                }
+
+                if (oldEntry.isDirectory()) {
+                    final ZipArchiveEntry dir = new ZipArchiveEntry(path.endsWith("/") ? path : path + "/");
+                    dir.setTime(oldEntry.getTime());
+                    int mode = normalizeDirMode(oldEntry.getUnixMode());
+                    final Integer override = FileMode.overrideModeFor(path, true, modeOverrides);
+                    if (override != null) {
+                        log.info(String.format("Overriding dir mode %o -> %o for %s", mode & 0777, override & 0777, path));
+                        mode = override;
+                    }
+                    dir.setUnixMode(mode);
+                    zout.putArchiveEntry(dir);
+                    zout.closeArchiveEntry();
                     continue;
                 }
 
 
-                final ZipEntry newEntry = new ZipEntry(path);
+                final ZipArchiveEntry newEntry = new ZipArchiveEntry(path);
 
-                //            copyAttributes(oldEntry, newEntry);
+                // copy attributes
+                newEntry.setTime(oldEntry.getTime());
+                newEntry.setComment(oldEntry.getComment());
 
-                zipOutputStream.putNextEntry(newEntry);
+                // compute base mode (fallback 0644 if missing)
+                int mode = oldEntry.getUnixMode();
+                if (mode == 0) {
+                    mode = UnixStat.FILE_FLAG | 0644;
+                }
+
+                // apply override if any
+                final Integer override = FileMode.overrideModeFor(path, false, modeOverrides);
+                if (override != null) {
+                    log.info(String.format("Overriding file mode %o -> %o for %s", mode & 0777, override & 0777, path));
+                    mode = override;
+                }
+                newEntry.setUnixMode(mode);
+
+                zout.putArchiveEntry(newEntry);
 
                 try {
                     if (path.endsWith(".class")) {
-                        scanClass(zipInputStream, zipOutputStream);
+                        scanClass(zin, zout);
                     } else if (isZip(path)) {
                         if (isExcludedJar(path)) {
-                            IO.copy(zipInputStream, zipOutputStream);
+                            IO.copy(zin, zout);
                         } else {
-                            scanJar(path, zipInputStream, zipOutputStream);
+                            // Read the inner entry fully first
+                            final ByteArrayOutputStream buf = new ByteArrayOutputStream(Math.max(32_768, (int) oldEntry.getSize()));
+                            IO.copy(zin, buf);
+                            final byte[] bytes = buf.toByteArray();
+
+                            try (ByteArrayInputStream innerIn = new ByteArrayInputStream(bytes);
+                                 ByteArrayOutputStream innerOut = new ByteArrayOutputStream(bytes.length)) {
+
+                                // Transform the inner archive into innerOut
+                                scanJar(path, innerIn, innerOut);
+
+                                // Write transformed inner archive to the current entry
+                                innerOut.writeTo(zout);
+
+                            } catch (IOException ex) {
+                                // Could not parse/transform (eg. corrupt inner JAR) -> copy raw as-is
+                                log.warn("Could not transform " + path + " (" + ex.getMessage() + "), copying raw.");
+                                IO.copy(new ByteArrayInputStream(bytes), zout);
+                            }
                         }
                     } else if (copyUnmodified(path)) {
-                        IO.copy(zipInputStream, zipOutputStream);
+                        IO.copy(zin, zout);
                     } else {
-                        scanResource(path, zipInputStream, zipOutputStream);
+                        scanResource(path, zin, zout);
                     }
                 } finally {
-                    zipOutputStream.closeEntry();
+                    zout.closeArchiveEntry();
                 }
             }
 
@@ -164,13 +219,16 @@ public class Transformation {
                 for (final Clazz clazz : jar.getSkipped()) {
                     log.debug("Applying patch " + clazz.getName());
 
-                    final ZipEntry newEntry = new ZipEntry(clazz.getName());
-                    zipOutputStream.putNextEntry(newEntry);
+                    final ZipArchiveEntry newEntry = new ZipArchiveEntry(clazz.getName());
+                    zout.putArchiveEntry(newEntry);
 
-                    // Run any transformations on these classes as well
-                    IO.copy(IO.read(clazz.getFile()), zipOutputStream);
+                    try {
+                        // Run any transformations on these classes as well
+                        IO.copy(IO.read(clazz.getFile()), zout);
+                    } finally {
+                        zout.closeArchiveEntry();
 
-                    zipOutputStream.closeEntry();
+                    }
                     clazz.applied();
                 }
             }
@@ -189,17 +247,19 @@ public class Transformation {
                 for (final Resource resource : resources) {
                     log.info("Adding " + resource.getPath());
 
-                    final ZipEntry newEntry = new ZipEntry(resource.getPath());
-                    zipOutputStream.putNextEntry(newEntry);
+                    final ZipArchiveEntry newEntry = new ZipArchiveEntry(resource.getPath());
+                    zout.putArchiveEntry(newEntry);
 
-                    // Run any transformations on these classes as well
-                    IO.copy(IO.read(resource.getFile()), zipOutputStream);
-
-                    zipOutputStream.closeEntry();
+                    try {
+                        // Run any transformations on these classes as well
+                        IO.copy(IO.read(resource.getFile()), zout);
+                    } finally {
+                        zout.closeArchiveEntry();
+                    }
                 }
             }
 
-            zipOutputStream.finish();
+            zout.finish();
         } catch (IOException e) {
             throw new IOException(jar.getPath() + e.getMessage(), e);
         } finally {
@@ -214,6 +274,11 @@ public class Transformation {
             log.error(String.format("Invalid pattern: '%s'", regex));
             return null;
         }
+    }
+
+    private int normalizeDirMode(final int old) {
+        final int mode = (old != 0 ? old : UnixStat.DIR_FLAG | 0755);
+        return (mode & ~UnixStat.FILE_FLAG) | UnixStat.DIR_FLAG;
     }
 
     public static class Resource {
@@ -437,17 +502,6 @@ public class Transformation {
         IO.copy(inputStream, outputStream);
     }
 
-    private static void copyAttributes(final ZipEntry oldEntry, final ZipEntry newEntry) {
-        Copy.copy(oldEntry, newEntry)
-                .att(ZipEntry::getTime, ZipEntry::setTime)
-                .att(ZipEntry::getComment, ZipEntry::setComment)
-                .att(ZipEntry::getExtra, ZipEntry::setExtra)
-                .att(ZipEntry::getMethod, ZipEntry::setMethod)
-                .att(ZipEntry::getCreationTime, ZipEntry::setCreationTime)
-                .att(ZipEntry::getLastModifiedTime, ZipEntry::setLastModifiedTime)
-                .att(ZipEntry::getLastAccessTime, ZipEntry::setLastAccessTime);
-    }
-
     private static boolean isZip(final String path) {
         return Is.Zip.accept(path);
     }
@@ -460,7 +514,7 @@ public class Transformation {
             return;
         }
 
-        final ClassWriter classWriter = new ClassWriter(Opcodes.ASM8);
+        final ClassWriter classWriter = new ClassWriter(Opcodes.ASM9);
         final ClassTransformer classTransformer = new ClassTransformer(classWriter);
         final ClassReader classReader = new ClassReader(in);
         classReader.accept(classTransformer, 0);
@@ -582,4 +636,5 @@ public class Transformation {
         public void write(final int b) {
         }
     };
+
 }

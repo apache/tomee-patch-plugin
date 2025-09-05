@@ -214,7 +214,7 @@ public class MethodTransformerTest {
     @Test
     public void visitInvokeDynamicInsn_Direct() {
         final Usage usage = new Usage();
-        final MethodScanner methodScanner = new MethodScanner(Opcodes.ASM8, new BytecodeUsage(usage, Opcodes.ASM8));
+        final MethodScanner methodScanner = new MethodScanner(Opcodes.ASM9, new BytecodeUsage(usage, Opcodes.ASM9));
         methodScanner.visitInvokeDynamicInsn(
                 "accept",
                 "(Ljavax/ejb/Process;)Ljavax/jms/Consumer;",

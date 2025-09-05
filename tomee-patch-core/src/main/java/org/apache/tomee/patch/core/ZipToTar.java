@@ -18,19 +18,22 @@ package org.apache.tomee.patch.core;
 
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
+import org.apache.commons.compress.archivers.zip.UnixStat;
 import org.tomitribe.util.IO;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 public class ZipToTar {
 
-    public static File toTarGz(final File zip) throws Exception {
+    public static File toTarGz(final File zip, final List<FileMode> fileModes, final Log log) throws Exception {
+        final List<FileMode.ModeOverride> modeOverrides = FileMode.compileModeOverrides(fileModes);
 
         final String tarGzName = zip.getName().replaceAll("\\.(zip|jar)$", ".tar.gz");
         final File tarGz = new File(zip.getParentFile(), tarGzName);
@@ -58,6 +61,14 @@ public class ZipToTar {
                 // Set the size and date
                 tarEntry.setSize(bytes.length);
                 tarEntry.setModTime(zipEntry.getLastModifiedTime().toMillis());
+
+                // compute base mode (fallback 0644 if missing)
+                int mode = UnixStat.FILE_FLAG | 0644;
+                final Integer override = FileMode.overrideModeFor(name, zip.isDirectory(), modeOverrides);
+                if (override != null) {
+                    log.info(String.format("Overriding file mode %o -> %o for %s", mode & 0777, override & 0777, name));
+                    tarEntry.setMode(override);
+                }
 
                 // Mark any shell scripts as executable
                 if (name.endsWith(".sh")) {

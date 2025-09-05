@@ -29,32 +29,35 @@
   </parent>
 
   <artifactId>tomee-patch-core</artifactId>
+  <properties>
+    <dependency.asm.version>9.8</dependency.asm.version>
+  </properties>
 
   <dependencies>
     <dependency>
       <groupId>org.ow2.asm</groupId>
       <artifactId>asm</artifactId>
-      <version>8.0.1</version>
+      <version>${dependency.asm.version}</version>
     </dependency>
     <dependency>
       <groupId>org.ow2.asm</groupId>
       <artifactId>asm-tree</artifactId>
-      <version>8.0.1</version>
+      <version>${dependency.asm.version}</version>
     </dependency>
     <dependency>
       <groupId>org.ow2.asm</groupId>
       <artifactId>asm-analysis</artifactId>
-      <version>8.0.1</version>
+      <version>${dependency.asm.version}</version>
     </dependency>
     <dependency>
       <groupId>org.ow2.asm</groupId>
       <artifactId>asm-commons</artifactId>
-      <version>8.0.1</version>
+      <version>${dependency.asm.version}</version>
     </dependency>
     <dependency>
       <groupId>org.ow2.asm</groupId>
       <artifactId>asm-util</artifactId>
-      <version>8.0.1</version>
+      <version>${dependency.asm.version}</version>
     </dependency>
     <dependency>
       <groupId>org.tomitribe</groupId>
@@ -69,7 +72,7 @@
     <dependency>
       <groupId>org.tomitribe</groupId>
       <artifactId>tomitribe-util</artifactId>
-      <version>1.4.4</version>
+      <version>1.5.10</version>
     </dependency>
     <dependency>
       <groupId>org.tomitribe</groupId>
@@ -84,12 +87,12 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-compress</artifactId>
-      <version>1.20</version>
+      <version>1.27.1</version>
     </dependency>
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      <version>4.10</version>
+      <version>4.13.2</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

@@ -42,7 +42,8 @@ public class ExcludeJarsTest {
                 .add("README.txt", "hi")
                 .add(jarName, testJar).toJar();
 
-        final Transformation transformation = new Transformation(new ArrayList<Clazz>(), new File("does not exist"), null, customSkips, null, new NullLog(), false);
+        final Transformation transformation = new Transformation(new ArrayList<Clazz>(), new File("does not exist"), null,
+                                                                 customSkips, null, null, new NullLog(), false);
         final File transformedJar = transformation.transformArchive(zipFile);
         assertTrue(obtainJarContent(transformedJar).contains(jarSignatureFileName));
     }
@@ -61,7 +62,8 @@ public class ExcludeJarsTest {
                 .add("README.txt", "hi")
                 .add(jarName, testJar).toJar();
 
-        final Transformation transformation = new Transformation(new ArrayList<Clazz>(), new File("does not exist"), null, customSkips, null, new NullLog(), false);
+        final Transformation transformation = new Transformation(new ArrayList<Clazz>(), new File("does not exist"), null, customSkips,
+                                                                 null, null, new NullLog(), false);
         final File transformedJar = transformation.transformArchive(zipFile);
         assertFalse(obtainJarContent(transformedJar).contains(jarSignatureFileName));
     }

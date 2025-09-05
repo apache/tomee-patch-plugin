@@ -59,7 +59,8 @@ public class DontModifyJarsTest {
                 .add("README.txt", "hi")
                 .add(jarName, testJar).toJar();
 
-        Transformation transformation = new Transformation(new ArrayList<>(), new File("does not exist"), null, null, null, new NullLog(), skipTransform);
+        Transformation transformation = new Transformation(new ArrayList<>(), new File("does not exist"), null,
+                                                           null, null, null, new NullLog(), skipTransform);
         File transformedZip = transformation.transformArchive(zipFile);
 
         final String testJarHashTransformed = sha512FromJarInsideZip(jarName, transformedZip);
